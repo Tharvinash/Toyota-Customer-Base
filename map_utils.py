@@ -3,6 +3,7 @@ import numpy as np
 import folium
 from folium.plugins import HeatMap, MarkerCluster, Fullscreen, MiniMap, MousePosition, MeasureControl
 from pathlib import Path
+from typing import Dict, Optional, Tuple
 
 # ---------- SETTINGS ----------
 DATA_DIR = Path(__file__).parent
@@ -152,4 +153,88 @@ def add_legend_box(m: folium.Map, heat_labels: list[str]) -> None:
     m.get_root().html.add_child(folium.Element(legend_html))
 
 
+def _haversine_array(
+    lat: np.ndarray,
+    lon: np.ndarray,
+    center_lat: float,
+    center_lon: float,
+) -> np.ndarray:
+    """
+    Vectorized haversine distance (in km) between each (lat, lon)
+    and a single center point.
+    """
+    R = 6371.0  # Earth radius in km
 
+    lat = np.radians(lat.astype(float))
+    lon = np.radians(lon.astype(float))
+    clat = np.radians(float(center_lat))
+    clon = np.radians(float(center_lon))
+
+    dlat = lat - clat
+    dlon = lon - clon
+
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat) * np.cos(clat) * np.sin(dlon / 2.0) ** 2
+    c = 2.0 * np.arcsin(np.sqrt(a))
+    return R * c
+
+
+def filter_by_radius(
+    df: pd.DataFrame,
+    center_lat: float,
+    center_lon: float,
+    radius_km: float,
+) -> pd.DataFrame:
+    """
+    Return only rows within radius_km of (center_lat, center_lon).
+    Assumes df has numeric 'lat' and 'lon' columns.
+    """
+    if df.empty or "lat" not in df.columns or "lon" not in df.columns:
+        return df.copy()
+
+    lat = df["lat"].to_numpy(dtype=float)
+    lon = df["lon"].to_numpy(dtype=float)
+    dists = _haversine_array(lat, lon, center_lat, center_lon)
+
+    mask = dists <= float(radius_km)
+    return df.loc[mask].copy()
+
+
+def find_search_center(
+    term: str,
+    dfs: Dict[str, pd.DataFrame],
+) -> Optional[Tuple[float, float]]:
+    """
+    Find a (lat, lon) center for a search term across multiple DataFrames.
+
+    Looks in columns like postcode, city, outlet_name, station_name, name
+    (case-insensitive). Returns the first matching row with valid coords,
+    or None if no match.
+    """
+    term = (term or "").strip()
+    if not term:
+        return None
+
+    search_cols_priority = [
+        "postcode",
+        "city",
+        "outlet_name",
+        "station_name",
+        "name",
+    ]
+
+    for df_name, df in dfs.items():
+        if df.empty or "lat" not in df.columns or "lon" not in df.columns:
+            continue
+
+        for col in search_cols_priority:
+            if col not in df.columns:
+                continue
+
+            mask = df[col].astype(str).str.contains(term, case=False, na=False)
+            candidates = df[mask & df["lat"].notna() & df["lon"].notna()]
+
+            if not candidates.empty:
+                row = candidates.iloc[0]
+                return float(row["lat"]), float(row["lon"])
+
+    return None

@@ -31,7 +31,8 @@ uvicorn main:app --reload
 5. Open the admin dashboard:
 
 - Admin UI: `http://127.0.0.1:8000/`
-- Map view: `http://127.0.0.1:8000/map`
+- Static Folium map: `http://127.0.0.1:8000/map`
+- Interactive search map: `http://127.0.0.1:8000/interactive-map`
 
 ### Environment variables
 

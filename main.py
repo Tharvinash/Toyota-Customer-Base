@@ -4,7 +4,7 @@ from typing import List
 from pathlib import Path
 
 import pandas as pd
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -20,6 +20,7 @@ from db import (
     init_db,
 )
 from map_builder import build_map
+from map_utils import ensure_latlon, find_search_center, filter_by_radius
 
 
 app = FastAPI(title="Selangor Map Backend")
@@ -68,6 +69,84 @@ def map_view(db: Session = Depends(get_db)) -> HTMLResponse:
 @app.get("/", response_class=HTMLResponse)
 def admin_home(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("admin_home.html", {"request": request})
+
+
+@app.get("/interactive-map", response_class=HTMLResponse)
+def interactive_map(request: Request) -> HTMLResponse:
+    """
+    Render the interactive Leaflet-based map with search UI.
+    """
+    return templates.TemplateResponse("interactive_map.html", {"request": request})
+
+
+@app.get("/api/search")
+def search_locations(
+    term: str = Query(..., min_length=1, description="Location name or postcode"),
+    radius_km: float = Query(10.0, gt=0, le=100, description="Search radius in kilometers"),
+    db: Session = Depends(get_db),
+):
+    """
+    Search by location name / postcode and return all nearby data:
+    customers, service outlets, BP outlets, and traffic police stations.
+    """
+    customers_df = ensure_latlon(_query_to_df(db.query(CustomerCell)))
+    service_df = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)))
+    bp_df = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)))
+    traffic_df = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)))
+
+    dfs = {
+        "customers": customers_df,
+        "service": service_df,
+        "bp": bp_df,
+        "traffic": traffic_df,
+    }
+
+    center = find_search_center(term, dfs)
+    if center is None:
+        raise HTTPException(status_code=404, detail=f"No matches found for '{term}'")
+
+    center_lat, center_lon = center
+
+    customers_df = filter_by_radius(customers_df, center_lat, center_lon, radius_km)
+    service_df = filter_by_radius(service_df, center_lat, center_lon, radius_km)
+    bp_df = filter_by_radius(bp_df, center_lat, center_lon, radius_km)
+    traffic_df = filter_by_radius(traffic_df, center_lat, center_lon, radius_km)
+
+    def df_to_records(df: pd.DataFrame, layer_name: str):
+        records: List[dict] = []
+        if df.empty:
+            return records
+
+        for _, row in df.iterrows():
+            label = (
+                row.get("outlet_name")
+                or row.get("station_name")
+                or row.get("name")
+                or row.get("city")
+                or row.get("postcode")
+                or layer_name
+            )
+
+            rec = {
+                "lat": float(row["lat"]),
+                "lon": float(row["lon"]),
+                "label": str(label),
+            }
+
+            for col in ("address", "city", "state", "postcode", "phone", "email", "weight"):
+                if col in df.columns and pd.notna(row.get(col)):
+                    rec[col] = row[col]
+            records.append(rec)
+        return records
+
+    return {
+        "center": {"lat": center_lat, "lon": center_lon},
+        "radius_km": float(radius_km),
+        "customers": df_to_records(customers_df, "customers"),
+        "service": df_to_records(service_df, "service"),
+        "bp": df_to_records(bp_df, "bp"),
+        "traffic": df_to_records(traffic_df, "traffic"),
+    }
 
 
 @app.get("/admin/service-outlets", response_class=HTMLResponse)
