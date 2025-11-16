@@ -18,7 +18,6 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
-*.html
 
 # Jupyter (if you ever use it here)
 .ipynb_checkpoints/
