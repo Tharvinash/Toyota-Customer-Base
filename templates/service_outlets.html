@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Toyota Service Outlets{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-7">
+    <h2 class="mb-3">Toyota Service Outlets</h2>
+    <table class="table table-sm table-striped align-middle">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>City</th>
+          <th>State</th>
+          <th>Postcode</th>
+          <th>Lat</th>
+          <th>Lon</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in outlets %}
+        <tr>
+          <td>{{ o.id }}</td>
+          <td>{{ o.outlet_name }}</td>
+          <td>{{ o.city }}</td>
+          <td>{{ o.state }}</td>
+          <td>{{ o.postcode }}</td>
+          <td>{{ o.lat }}</td>
+          <td>{{ o.lon }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col-md-5">
+    <h3 class="mb-3">Add Service Outlet</h3>
+    <form method="post">
+      <div class="mb-2">
+        <label class="form-label">Outlet Name</label>
+        <input name="outlet_name" class="form-control" required />
+      </div>
+      <div class="mb-2">
+        <label class="form-label">Address</label>
+        <textarea name="address" class="form-control" rows="2"></textarea>
+      </div>
+      <div class="row">
+        <div class="col-md-4 mb-2">
+          <label class="form-label">City</label>
+          <input name="city" class="form-control" />
+        </div>
+        <div class="col-md-4 mb-2">
+          <label class="form-label">State</label>
+          <input name="state" class="form-control" />
+        </div>
+        <div class="col-md-4 mb-2">
+          <label class="form-label">Postcode</label>
+          <input name="postcode" class="form-control" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-6 mb-2">
+          <label class="form-label">Latitude</label>
+          <input name="lat" type="number" step="0.000001" class="form-control" />
+        </div>
+        <div class="col-md-6 mb-2">
+          <label class="form-label">Longitude</label>
+          <input name="lon" type="number" step="0.000001" class="form-control" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-6 mb-2">
+          <label class="form-label">Phone</label>
+          <input name="phone" class="form-control" />
+        </div>
+        <div class="col-md-6 mb-2">
+          <label class="form-label">Email</label>
+          <input name="email" type="email" class="form-control" />
+        </div>
+      </div>
+      <button class="btn btn-primary mt-2" type="submit">Save</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+

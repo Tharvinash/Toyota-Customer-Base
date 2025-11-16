@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{% block title %}Selangor Map Admin{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="/">Selangor Map Admin</a>
+        <div class="collapse navbar-collapse">
+          <ul class="navbar-nav me-auto">
+            <li class="nav-item">
+              <a class="nav-link" href="/admin/service-outlets">Service Outlets</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/admin/bp-outlets">Body &amp; Paint</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/admin/traffic-stations">Traffic Stations</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/admin/customers/upload">Customer CSV</a>
+            </li>
+          </ul>
+          <a class="btn btn-outline-light" href="/map" target="_blank">View Map</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="container">
+      {% block content %}{% endblock %}
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+  </html>
+
+

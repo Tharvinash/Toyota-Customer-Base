@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Customer CSV{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-6">
+    <h2 class="mb-3">Upload Customer Base CSV</h2>
+    <p class="text-muted">
+      Upload a CSV with columns:
+      <code>state, city, postcode, lat, lon, weight</code>.
+      This will replace the existing customer heatmap cells.
+    </p>
+    <form method="post" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label class="form-label">CSV File</label>
+        <input class="form-control" type="file" name="file" accept=".csv" required />
+      </div>
+      <button class="btn btn-primary" type="submit">Upload</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+

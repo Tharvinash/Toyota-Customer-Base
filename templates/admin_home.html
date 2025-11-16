@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-8">
+    <h1 class="mb-3">Admin Dashboard</h1>
+    <p class="text-muted">
+      Manage Toyota service outlets, body &amp; paint outlets, traffic police stations,
+      and upload the latest customer base CSV for the heatmap.
+    </p>
+
+    <div class="list-group">
+      <a class="list-group-item list-group-item-action" href="/admin/service-outlets">
+        Toyota Service Outlets
+      </a>
+      <a class="list-group-item list-group-item-action" href="/admin/bp-outlets">
+        Toyota Body &amp; Paint Outlets
+      </a>
+      <a class="list-group-item list-group-item-action" href="/admin/traffic-stations">
+        Traffic Police Stations
+      </a>
+      <a class="list-group-item list-group-item-action" href="/admin/customers/upload">
+        Upload Customer CSV
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+
