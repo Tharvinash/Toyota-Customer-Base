@@ -49,5 +49,3 @@ uvicorn main:app --reload
   - Provision a PostgreSQL instance.
   - Set `DATABASE_URL` in the environment.
   - Deploy the code and let the platform run the `web` process.
-
-

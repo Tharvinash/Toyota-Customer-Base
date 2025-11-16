@@ -28,8 +28,10 @@ app = FastAPI(title="Selangor Map Backend")
 # Init DB on startup (simple dev/local approach)
 init_db()
 
-templates = Jinja2Templates(directory="templates")
-static_dir = Path(__file__).parent / "static"
+# Use a path relative to this file so it works regardless of the working directory
+BASE_DIR = Path(__file__).parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+static_dir = BASE_DIR / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
