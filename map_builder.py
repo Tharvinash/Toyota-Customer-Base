@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Tuple
 
 import folium
 import numpy as np
@@ -15,11 +14,7 @@ from folium.plugins import (
     MousePosition,
 )
 
-from build_selangor_map import CITY_LOOKUP, STATE, ensure_latlon, make_bins_from_weights, add_legend_box, log
-
-
-DATA_DIR = Path(__file__).parent
-OUTPUT_HTML = DATA_DIR / "selangor_map.html"
+from map_utils import ensure_latlon, make_bins_from_weights, add_legend_box, log
 
 
 def build_map(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from build_selangor_map import DATA_DIR, ensure_latlon, load_csv, log
+from map_utils import ensure_latlon, load_csv, log
 from db import (
     CustomerCell,
     ToyotaBPOutlet,
@@ -22,7 +22,7 @@ def migrate_service(db):
     db.query(ToyotaServiceOutlet).delete()
     for _, r in df.iterrows():
         o = ToyotaServiceOutlet(
-            outlet_name=r.get("outlet_name") or r.get("name") or "",
+            outlet_name=r.get("outlet name") or r.get("name") or "",
             address=r.get("address"),
             city=r.get("city"),
             state=r.get("state"),
@@ -44,7 +44,7 @@ def migrate_bp(db):
     db.query(ToyotaBPOutlet).delete()
     for _, r in df.iterrows():
         o = ToyotaBPOutlet(
-            outlet_name=r.get("outlet_name") or r.get("name") or "",
+            outlet_name=r.get("outlet name") or r.get("name") or "",
             address=r.get("address"),
             city=r.get("city"),
             state=r.get("state"),

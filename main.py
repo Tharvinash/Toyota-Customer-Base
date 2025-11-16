@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import List
+from pathlib import Path
 
 import pandas as pd
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
@@ -27,7 +28,9 @@ app = FastAPI(title="Selangor Map Backend")
 init_db()
 
 templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
 @app.get("/health", response_class=HTMLResponse)
