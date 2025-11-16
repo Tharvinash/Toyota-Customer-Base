@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import folium
 import numpy as np
 import pandas as pd
@@ -14,7 +12,7 @@ from folium.plugins import (
     MousePosition,
 )
 
-from map_utils import ensure_latlon, make_bins_from_weights, add_legend_box, log
+from map_utils import ensure_latlon, make_bins_from_weights, add_legend_box, log, MALAYSIA_BOUNDS
 
 
 def build_map(
@@ -39,8 +37,13 @@ def build_map(
         f"service:{len(service)}, bp:{len(bp)}, traffic:{len(traffic_police)}"
     )
 
-    # Base map + UI
-    m = folium.Map(location=(3.0738, 101.5183), zoom_start=10, tiles=None)
+    # Base map + UI (center roughly on Malaysia, restrict view to Malaysia bounds)
+    m = folium.Map(
+        location=(4.5, 109.0),
+        zoom_start=6,
+        tiles=None,
+        max_bounds=True,
+    )
     folium.TileLayer("CartoDB Positron", name="Light").add_to(m)
     folium.TileLayer("CartoDB Voyager", name="Voyager (labels)").add_to(m)
     folium.TileLayer("CartoDB Dark_Matter", name="Dark").add_to(m)
@@ -70,6 +73,9 @@ def build_map(
         lats = [p[0] for p in bounds_pts]
         lons = [p[1] for p in bounds_pts]
         m.fit_bounds([[min(lats), min(lons)], [max(lats), max(lons)]], padding=(20, 20))
+
+    # Finally, ensure the view is constrained to Malaysia only
+    m.fit_bounds(MALAYSIA_BOUNDS)
 
     # Heatmap
     heat_labels = ["Low", "Med-Low", "Medium", "Med-High", "High"]

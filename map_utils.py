@@ -9,6 +9,13 @@ DATA_DIR = Path(__file__).parent
 STATE = "Selangor"
 OUTPUT_HTML = DATA_DIR / "selangor_map.html"
 
+# Approximate bounding box for Malaysia (Peninsular + East Malaysia)
+# [south_lat, west_lon], [north_lat, east_lon]
+MALAYSIA_BOUNDS = [
+    [0.85, 99.5],
+    [7.5, 119.5],
+]
+
 CITY_LOOKUP = {
     "Shah Alam": (3.0738, 101.5183),
     "Petaling Jaya": (3.1073, 101.6067),
