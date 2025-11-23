@@ -20,7 +20,7 @@ from db import (
     init_db,
 )
 from map_builder import build_map
-from map_utils import ensure_latlon, geocode_location, filter_by_radius
+from map_utils import ensure_latlon, geocode_location, geocode_multiple_locations, filter_by_radius
 
 
 app = FastAPI(title="Selangor Map Backend")
@@ -204,6 +204,99 @@ def search_locations(
 
     return {
         "center": {"lat": center_lat, "lon": center_lon},
+        "radius_km": float(radius_km),
+        "customers": df_to_records(customers_df, "customers"),
+        "service": df_to_records(service_df, "service"),
+        "bp": df_to_records(bp_df, "bp"),
+        "traffic": df_to_records(traffic_df, "traffic"),
+    }
+
+
+@app.get("/api/search-multiple")
+def search_multiple_locations(
+    terms: str = Query(..., description="Comma-separated location names or postcodes"),
+    radius_km: float = Query(10.0, gt=0, le=100, description="Search radius in kilometers"),
+    db: Session = Depends(get_db),
+):
+    """
+    Search by multiple location names / postcodes using OpenStreetMap Nominatim.
+    Returns all nearby data within radius of ANY of the specified locations.
+    """
+    # Parse comma-separated terms
+    term_list = [t.strip() for t in terms.split(",") if t.strip()]
+    if not term_list:
+        raise HTTPException(status_code=400, detail="Please provide at least one location.")
+    
+    if len(term_list) > 10:  # Limit to prevent abuse
+        raise HTTPException(status_code=400, detail="Maximum 10 locations allowed per search.")
+
+    # Geocode all locations (with rate limiting built-in)
+    geocode_results = geocode_multiple_locations(term_list, delay_seconds=1.2)
+    
+    centers = [r for r in geocode_results if r["success"]]
+    failed_terms = [r["term"] for r in geocode_results if not r["success"]]
+
+    if not centers:
+        raise HTTPException(
+            status_code=404,
+            detail=f"None of the locations were found: {', '.join(failed_terms)}"
+        )
+
+    # Load all database data
+    customers_df = ensure_latlon(_query_to_df(db.query(CustomerCell)))
+    service_df = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)))
+    bp_df = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)))
+    traffic_df = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)))
+
+    # Filter by radius around ANY of the centers
+    def filter_by_multiple_radius(df: pd.DataFrame, centers_list: list, radius: float):
+        if df.empty:
+            return df.copy()
+        
+        # Create a mask for points within radius of ANY center
+        mask = pd.Series([False] * len(df), index=df.index)
+        
+        for center in centers_list:
+            center_df = filter_by_radius(df, center["lat"], center["lon"], radius)
+            mask = mask | df.index.isin(center_df.index)
+        
+        return df.loc[mask].copy()
+
+    customers_df = filter_by_multiple_radius(customers_df, centers, radius_km)
+    service_df = filter_by_multiple_radius(service_df, centers, radius_km)
+    bp_df = filter_by_multiple_radius(bp_df, centers, radius_km)
+    traffic_df = filter_by_multiple_radius(traffic_df, centers, radius_km)
+
+    def df_to_records(df: pd.DataFrame, layer_name: str):
+        records: List[dict] = []
+        if df.empty:
+            return records
+
+        for _, row in df.iterrows():
+            label = (
+                row.get("outlet_name")
+                or row.get("station_name")
+                or row.get("name")
+                or row.get("city")
+                or row.get("postcode")
+                or layer_name
+            )
+
+            rec = {
+                "lat": float(row["lat"]),
+                "lon": float(row["lon"]),
+                "label": str(label),
+            }
+
+            for col in ("address", "city", "state", "postcode", "phone", "email", "weight"):
+                if col in df.columns and pd.notna(row.get(col)):
+                    rec[col] = row[col]
+            records.append(rec)
+        return records
+
+    return {
+        "centers": [{"term": c["term"], "lat": c["lat"], "lon": c["lon"]} for c in centers],
+        "failed_terms": failed_terms,
         "radius_km": float(radius_km),
         "customers": df_to_records(customers_df, "customers"),
         "service": df_to_records(service_df, "service"),

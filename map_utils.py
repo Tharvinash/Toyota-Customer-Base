@@ -3,8 +3,9 @@ import numpy as np
 import folium
 from folium.plugins import HeatMap, MarkerCluster, Fullscreen, MiniMap, MousePosition, MeasureControl
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 import requests
+import time
 
 # ---------- SETTINGS ----------
 DATA_DIR = Path(__file__).parent
@@ -242,6 +243,50 @@ def geocode_location(term: str) -> Optional[Tuple[float, float]]:
     except Exception as e:
         log(f"[ERROR] Geocoding failed for '{term}': {e}")
         return None
+
+
+def geocode_multiple_locations(terms: List[str], delay_seconds: float = 1.2) -> List[dict]:
+    """
+    Geocode multiple locations using OpenStreetMap Nominatim.
+    Adds delays between requests to respect rate limits (1 req/sec).
+    
+    Args:
+        terms: List of location names or postcodes to geocode
+        delay_seconds: Delay between requests (default 1.2 to respect 1 req/sec limit)
+    
+    Returns:
+        List of dicts with keys: 'term', 'lat', 'lon', 'success'
+    """
+    results = []
+    
+    log(f"Geocoding {len(terms)} location(s)...")
+    
+    for i, term in enumerate(terms):
+        if i > 0:  # Don't delay before first request
+            time.sleep(delay_seconds)  # Respect 1 request/second limit
+        
+        center = geocode_location(term)
+        if center:
+            results.append({
+                "term": term,
+                "lat": center[0],
+                "lon": center[1],
+                "success": True
+            })
+            log(f"✓ Geocoded '{term}' -> ({center[0]}, {center[1]})")
+        else:
+            results.append({
+                "term": term,
+                "lat": None,
+                "lon": None,
+                "success": False
+            })
+            log(f"✗ Failed to geocode '{term}'")
+    
+    successful = sum(1 for r in results if r["success"])
+    log(f"Geocoding complete: {successful}/{len(terms)} successful")
+    
+    return results
 
 
 def find_search_center(

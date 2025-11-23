@@ -59,29 +59,34 @@
 <div class="row mb-3">
   <div class="col-md-10">
     <div class="card">
-      <div class="card-body d-flex flex-wrap gap-2 align-items-center">
-        <input
-          id="search-term"
-          class="form-control me-2"
-          placeholder="Location name or postcode"
-          style="max-width: 280px;"
-        />
-        <input
-          id="search-radius"
-          class="form-control me-2"
-          type="number"
-          value="10"
-          min="1"
-          max="100"
-          style="max-width: 120px;"
-        />
-        <button id="search-btn" class="btn btn-primary me-2">
-          Search
-        </button>
-        <button id="clear-btn" class="btn btn-outline-secondary me-2">
-          Clear
-        </button>
-        <span id="search-status" class="text-muted small"></span>
+      <div class="card-body">
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+          <input
+            id="search-term"
+            class="form-control me-2"
+            placeholder=""
+            style="max-width: 400px;"
+          />
+          <input
+            id="search-radius"
+            class="form-control me-2"
+            type="number"
+            value="10"
+            min="1"
+            max="100"
+            style="max-width: 120px;"
+          />
+          <button id="search-btn" class="btn btn-primary me-2">
+            Search
+          </button>
+          <button id="clear-btn" class="btn btn-outline-secondary me-2">
+            Clear
+          </button>
+          <span id="search-status" class="text-muted small"></span>
+        </div>
+        <div class="tips-ui" style="font-size: 12px; color: #6c757d; padding: 8px; background-color: #f8f9fa; border-radius: 4px; margin-top: 8px;">
+          <strong>Tips:</strong> Enter location(s) or postcode(s), e.g., <code>47300, 40000, Shah Alam</code> (comma-separated for multiple locations)
+        </div>
       </div>
     </div>
   </div>
@@ -328,7 +333,8 @@
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
-    customersLayer = L.layerGroup().addTo(map);
+    // Initialize customersLayer but don't add to map (hidden)
+    customersLayer = L.layerGroup();
     serviceLayer = L.layerGroup().addTo(map);
     bpLayer = L.layerGroup().addTo(map);
     trafficLayer = L.layerGroup().addTo(map);
@@ -336,7 +342,6 @@
 
     L.control
       .layers(null, {
-        Customers: customersLayer,
         "Toyota Service Outlets": serviceLayer,
         "Toyota Body & Paint": bpLayer,
         "Traffic Police Stations": trafficLayer,
@@ -371,13 +376,26 @@
       return;
     }
 
-    statusEl.textContent = "Searching...";
+    // Check if multiple terms (comma-separated)
+    const hasMultiple = term.includes(",");
+    const termCount = hasMultiple ? term.split(",").filter(t => t.trim()).length : 1;
+    
+    if (hasMultiple && termCount > 10) {
+      statusEl.textContent = "Maximum 10 locations allowed per search.";
+      statusEl.style.color = "#dc3545"; // Red for error
+      return;
+    }
+
+    statusEl.textContent = hasMultiple 
+      ? `Geocoding ${termCount} location(s)... This may take a moment.`
+      : "Searching...";
     statusEl.style.color = "#6c757d"; // Gray for loading
 
     try {
-      const url = `/api/search?term=${encodeURIComponent(
-        term
-      )}&radius_km=${encodeURIComponent(radius)}`;
+      // Use appropriate endpoint based on whether multiple terms
+      const url = hasMultiple
+        ? `/api/search-multiple?terms=${encodeURIComponent(term)}&radius_km=${encodeURIComponent(radius)}`
+        : `/api/search?term=${encodeURIComponent(term)}&radius_km=${encodeURIComponent(radius)}`;
       const resp = await fetch(url);
 
       if (!resp.ok) {
@@ -400,8 +418,18 @@
         throw new Error("Invalid response from server");
       }
 
-      if (!data.center || typeof data.center.lat !== 'number' || typeof data.center.lon !== 'number') {
-        throw new Error("Invalid center coordinates in response");
+      // Handle both single search (center) and multiple search (centers) responses
+      const centers = data.centers || (data.center ? [data.center] : []);
+      
+      if (centers.length === 0) {
+        throw new Error("No center coordinates in response");
+      }
+
+      // Validate all centers have valid coordinates
+      for (const center of centers) {
+        if (!center || typeof center.lat !== 'number' || typeof center.lon !== 'number') {
+          throw new Error("Invalid center coordinates in response");
+        }
       }
 
       customersLayer.clearLayers();
@@ -443,37 +471,50 @@
         });
       }
 
-      addMarkers(data.customers || [], customersLayer, customerStyle);
+      // Customers layer is disabled - don't add markers
+      // addMarkers(data.customers || [], customersLayer, customerStyle);
       addMarkers(data.service || [], serviceLayer, serviceStyle);
       addMarkers(data.bp || [], bpLayer, bpStyle);
       addMarkers(data.traffic || [], trafficLayer, trafficStyle);
 
-      // Create circle around search center
-      const centerLat = data.center.lat;
-      const centerLon = data.center.lon;
+      // centers is already defined in validation above
       const radiusKm = data.radius_km || 10;
+      const colors = ["red", "blue", "green", "orange", "purple", "cyan", "magenta", "yellow", "pink", "brown"];
       
-      const circle = L.circle([centerLat, centerLon], {
-        radius: radiusKm * 1000,
-        color: "red",
-        weight: 2,
-        fill: false,
-        fillOpacity: 0.1,
-      }).addTo(borderLayer);
+      if (centers.length === 0) {
+        throw new Error("No center coordinates in response");
+      }
 
-      // Add center marker
-      L.marker([centerLat, centerLon], {
-        icon: L.divIcon({
-          className: 'custom-div-icon',
-          html: `<div style="background-color: red; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>`,
-          iconSize: [12, 12]
-        })
-      }).bindPopup(`<strong>Search Center: ${term}</strong>`).addTo(borderLayer);
+      // Create circles and markers for each center
+      centers.forEach((center, index) => {
+        const centerLat = center.lat;
+        const centerLon = center.lon;
+        const centerTerm = center.term || term;
+        const color = colors[index % colors.length];
+        
+        // Create circle around search center
+        const circle = L.circle([centerLat, centerLon], {
+          radius: radiusKm * 1000,
+          color: color,
+          weight: 2,
+          fill: false,
+          fillOpacity: 0.1,
+        }).addTo(borderLayer);
 
-      // Add circle bounds to fit view
-      const circleBounds = circle.getBounds();
-      bounds.push(circleBounds.getNorthEast());
-      bounds.push(circleBounds.getSouthWest());
+        // Add center marker
+        L.marker([centerLat, centerLon], {
+          icon: L.divIcon({
+            className: 'custom-div-icon',
+            html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>`,
+            iconSize: [12, 12]
+          })
+        }).bindPopup(`<strong>Search Center: ${centerTerm}</strong>`).addTo(borderLayer);
+
+        // Add circle bounds to fit view
+        const circleBounds = circle.getBounds();
+        bounds.push(circleBounds.getNorthEast());
+        bounds.push(circleBounds.getSouthWest());
+      });
 
       // Fit map to show all markers and circle
       if (bounds.length > 0) {
@@ -485,25 +526,42 @@
           }, 100);
         } catch (e) {
           console.warn("Error fitting bounds:", e);
-          // Fallback: just center on the search location
-          map.setView([centerLat, centerLon], 12);
+          // Fallback: just center on the first search location
+          if (centers.length > 0) {
+            map.setView([centers[0].lat, centers[0].lon], 12);
+          }
         }
       } else {
-        // If no bounds, just center on the search location
-        map.setView([centerLat, centerLon], 12);
+        // If no bounds, just center on the first search location
+        if (centers.length > 0) {
+          map.setView([centers[0].lat, centers[0].lon], 12);
+        }
       }
 
-      // Count total results
-      const totalResults = (data.customers?.length || 0) + 
-                          (data.service?.length || 0) + 
+      // Count total results (excluding customers - they're hidden)
+      const totalResults = (data.service?.length || 0) + 
                           (data.bp?.length || 0) + 
                           (data.traffic?.length || 0);
 
-      if (totalResults > 0) {
-        statusEl.textContent = `Found ${totalResults} result(s) within ${radiusKm} km of "${term}".`;
+      // Build status message
+      let statusMsg = "";
+      if (centers.length > 1) {
+        // Multiple centers
+        statusMsg = `Found ${totalResults} result(s) within ${radiusKm} km of ${centers.length} location(s)`;
+        if (data.failed_terms && data.failed_terms.length > 0) {
+          statusMsg += ` (${data.failed_terms.length} location(s) not found: ${data.failed_terms.join(", ")})`;
+        }
+        statusMsg += ".";
       } else {
-        statusEl.textContent = `No results found within ${radiusKm} km of "${term}". Try increasing the radius.`;
+        // Single center
+        if (totalResults > 0) {
+          statusMsg = `Found ${totalResults} result(s) within ${radiusKm} km of "${term}".`;
+        } else {
+          statusMsg = `No results found within ${radiusKm} km of "${term}". Try increasing the radius.`;
+        }
       }
+      
+      statusEl.textContent = statusMsg;
       statusEl.style.color = "#28a745"; // Green for success
     } catch (err) {
       console.error("Search error:", err);
