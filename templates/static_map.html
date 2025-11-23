@@ -4,9 +4,24 @@
 
 {% block content %}
 <style>
-  /* Ensure navbar has proper spacing */
-  .navbar {
+  /* Ensure navbar has proper spacing and size - use highest specificity */
+  body nav.navbar.navbar-expand-lg.navbar-dark.bg-dark {
     margin-bottom: 1.5rem !important;
+    min-height: 56px !important;
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+  
+  /* Prevent any global styles from affecting navbar */
+  nav.navbar {
+    margin-bottom: 1.5rem !important;
+  }
+  
+  /* Ensure navbar brand and items have proper sizing */
+  .navbar-brand {
+    font-size: 1.25rem !important;
+    padding-top: 0.3125rem !important;
+    padding-bottom: 0.3125rem !important;
   }
   
   /* Mobile-specific fixes for map visibility */

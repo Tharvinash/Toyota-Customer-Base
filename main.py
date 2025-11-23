@@ -77,11 +77,18 @@ def map_view(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     body_match = re.search(r'<body[^>]*>(.*?)</body>', full_html, re.DOTALL | re.IGNORECASE)
     body_content = body_match.group(1) if body_match else full_html
     
-    # Extract CSS links from head
-    css_links = re.findall(r'<link[^>]*>', head_content, re.IGNORECASE)
+    # Extract CSS links from head, but exclude Bootstrap (we already have it in base.html)
+    all_css_links = re.findall(r'<link[^>]*>', head_content, re.IGNORECASE)
+    css_links = [link for link in all_css_links if 'bootstrap' not in link.lower()]
     
-    # Extract style tags from head
-    head_styles = re.findall(r'<style[^>]*>.*?</style>', head_content, re.DOTALL)
+    # Extract style tags from head, but filter out global html/body styles that might conflict
+    all_head_styles = re.findall(r'<style[^>]*>.*?</style>', head_content, re.DOTALL)
+    # Keep only styles that don't affect global html/body layout
+    head_styles = []
+    for style in all_head_styles:
+        # Exclude styles that set global html/body margins/padding
+        if not re.search(r'html\s*,\s*body\s*\{[^}]*margin|html\s*,\s*body\s*\{[^}]*padding', style, re.IGNORECASE):
+            head_styles.append(style)
     
     # Extract all scripts (from both head and body)
     all_scripts = re.findall(r'<script[^>]*>.*?</script>', full_html, re.DOTALL)
