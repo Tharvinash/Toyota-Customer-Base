@@ -3,6 +3,59 @@
 {% block title %}Interactive Map{% endblock %}
 
 {% block content %}
+<style>
+  /* Mobile-specific fixes for map visibility */
+  @media (max-width: 768px) {
+    main.container {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+    .navbar {
+      margin-bottom: 0.5rem !important;
+    }
+    #map-container {
+      height: calc(100vh - 180px) !important;
+      min-height: 300px !important;
+      border-radius: 0 !important;
+      margin-left: -15px;
+      margin-right: -15px;
+      width: calc(100% + 30px);
+      position: relative !important;
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      z-index: 1 !important;
+    }
+    #map {
+      position: relative !important;
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      height: 100% !important;
+      width: 100% !important;
+    }
+    .row.mb-3 {
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+    .card {
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+    /* Ensure Leaflet container is visible */
+    .leaflet-container {
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      height: 100% !important;
+      width: 100% !important;
+    }
+  }
+</style>
+
 <div class="row mb-3">
   <div class="col-md-10">
     <div class="card">
@@ -36,9 +89,9 @@
 
 <div
   id="map-container"
-  style="position: relative; height: 70vh; border-radius: 8px; overflow: hidden;"
+  style="position: relative; height: 70vh; min-height: 400px; border-radius: 8px; overflow: hidden;"
 >
-  <div id="map" style="height: 100%;"></div>
+  <div id="map" style="height: 100%; width: 100%;"></div>
 
   <!-- Legend copied from static map styling for consistent UX -->
   <div
@@ -55,6 +108,7 @@
       font-size: 14px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
       min-width: 230px;
+      max-width: calc(100% - 24px);
     "
   >
     <div style="font-weight: 600; margin-bottom: 6px">Legend</div>
@@ -155,25 +209,57 @@
   href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
   crossorigin="anonymous"
 />
+<style>
+  /* Mobile responsive fixes for interactive map */
+  @media (max-width: 768px) {
+    #map-container {
+      height: calc(100vh - 180px) !important;
+      min-height: 300px !important;
+    }
+    #map-legend {
+      font-size: 11px !important;
+      padding: 8px 10px !important;
+      min-width: 180px !important;
+      right: 8px !important;
+      bottom: 10px !important;
+    }
+    #map-legend span {
+      font-size: 11px !important;
+    }
+    .card-body {
+      padding: 0.75rem !important;
+    }
+    .form-control {
+      font-size: 14px !important;
+    }
+    .btn {
+      font-size: 14px !important;
+      padding: 0.375rem 0.75rem !important;
+    }
+    /* Ensure map is visible and not hidden */
+    #map {
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+  }
+  /* Ensure Leaflet works on mobile */
+  .leaflet-container {
+    touch-action: pan-x pan-y;
+    -webkit-tap-highlight-color: transparent;
+  }
+</style>
 <script
   src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
   crossorigin=""
 ></script>
 <script>
-  const map = L.map("map").setView([4.5, 109.0], 6);
-
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap contributors",
-  }).addTo(map);
-
-  const customersLayer = L.layerGroup().addTo(map);
-  const serviceLayer = L.layerGroup().addTo(map);
-  const bpLayer = L.layerGroup().addTo(map);
-  const trafficLayer = L.layerGroup().addTo(map);
-  const borderLayer = L.layerGroup().addTo(map);
-
+  // Declare map variable globally
+  let map;
+  let customersLayer, serviceLayer, bpLayer, trafficLayer, borderLayer;
+  
+  // Define marker styles globally so they're accessible everywhere
   const customerStyle = {
     radius: 7,
     color: "#e67e22",
@@ -198,34 +284,95 @@
     fillColor: "red",
     fillOpacity: 0.9,
   };
+  
+  // Wait for DOM to be fully loaded before initializing map
+  document.addEventListener('DOMContentLoaded', function() {
+    // Ensure map container is visible
+    const mapContainer = document.getElementById('map-container');
+    const mapDiv = document.getElementById('map');
+    if (mapContainer && mapDiv) {
+      mapContainer.style.display = 'block';
+      mapDiv.style.display = 'block';
+      mapDiv.style.visibility = 'visible';
+      mapDiv.style.opacity = '1';
+    }
+    
+    // Initialize map with mobile-friendly settings
+    map = L.map("map", {
+      touchZoom: true,
+      doubleClickZoom: true,
+      boxZoom: true,
+      keyboard: true,
+      scrollWheelZoom: true,
+      dragging: true,
+      tap: true
+    }).setView([4.5, 109.0], 6);
+    
+    // Force map to resize on mobile after initialization
+    setTimeout(() => {
+      map.invalidateSize();
+      // Double-check visibility
+      if (mapContainer) {
+        mapContainer.style.display = 'block';
+        mapContainer.style.visibility = 'visible';
+      }
+    }, 100);
+    
+    // Additional resize after a short delay for mobile
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 500);
 
-  L.control
-    .layers(null, {
-      Customers: customersLayer,
-      "Toyota Service Outlets": serviceLayer,
-      "Toyota Body & Paint": bpLayer,
-      "Traffic Police Stations": trafficLayer,
-    })
-    .addTo(map);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(map);
+
+    customersLayer = L.layerGroup().addTo(map);
+    serviceLayer = L.layerGroup().addTo(map);
+    bpLayer = L.layerGroup().addTo(map);
+    trafficLayer = L.layerGroup().addTo(map);
+    borderLayer = L.layerGroup().addTo(map);
+
+    L.control
+      .layers(null, {
+        Customers: customersLayer,
+        "Toyota Service Outlets": serviceLayer,
+        "Toyota Body & Paint": bpLayer,
+        "Traffic Police Stations": trafficLayer,
+      })
+      .addTo(map);
+  });
 
   async function runSearch() {
     const termInput = document.getElementById("search-term");
     const radiusInput = document.getElementById("search-radius");
     const statusEl = document.getElementById("search-status");
 
+    // Check if map and layers are initialized
+    if (!map || !customersLayer || !serviceLayer || !bpLayer || !trafficLayer || !borderLayer) {
+      statusEl.textContent = "Map is still loading. Please wait...";
+      statusEl.style.color = "#dc3545"; // Red for error
+      setTimeout(() => runSearch(), 500); // Retry after 500ms
+      return;
+    }
+
     const term = termInput.value.trim();
     const radius = parseFloat(radiusInput.value);
 
     if (!term) {
       statusEl.textContent = "Please enter a location or postcode.";
+      statusEl.style.color = "#dc3545"; // Red for error
       return;
     }
     if (!radius || radius <= 0) {
       statusEl.textContent = "Radius must be a positive number.";
+      statusEl.style.color = "#dc3545"; // Red for error
       return;
     }
 
     statusEl.textContent = "Searching...";
+    statusEl.style.color = "#6c757d"; // Gray for loading
 
     try {
       const url = `/api/search?term=${encodeURIComponent(
@@ -234,7 +381,7 @@
       const resp = await fetch(url);
 
       if (!resp.ok) {
-        let detail = "No results found.";
+        let detail = "Location not found. Please try a different name or postcode.";
         try {
           const data = await resp.json();
           if (data && data.detail) {
@@ -242,10 +389,20 @@
           }
         } catch (e) {}
         statusEl.textContent = detail;
+        statusEl.style.color = "#dc3545"; // Red for error
         return;
       }
 
       const data = await resp.json();
+
+      // Validate response data
+      if (!data) {
+        throw new Error("Invalid response from server");
+      }
+
+      if (!data.center || typeof data.center.lat !== 'number' || typeof data.center.lon !== 'number') {
+        throw new Error("Invalid center coordinates in response");
+      }
 
       customersLayer.clearLayers();
       serviceLayer.clearLayers();
@@ -256,7 +413,12 @@
       const bounds = [];
 
       function addMarkers(items, layer, style) {
+        if (!Array.isArray(items)) return;
         items.forEach((item) => {
+          if (!item || typeof item.lat !== 'number' || typeof item.lon !== 'number') {
+            console.warn("Invalid marker data:", item);
+            return;
+          }
           const latlng = [item.lat, item.lon];
           bounds.push(latlng);
 
@@ -265,11 +427,13 @@
           delete props.lat;
           delete props.lon;
 
-          let popup = `<strong>${item.label}</strong>`;
+          let popup = `<strong>${item.label || 'Location'}</strong>`;
           const lines = [];
           for (const [k, v] of Object.entries(props)) {
             if (k === "label") continue;
-            lines.push(`<b>${k}</b>: ${v}`);
+            if (v !== null && v !== undefined && v !== '') {
+              lines.push(`<b>${k}</b>: ${v}`);
+            }
           }
           if (lines.length) {
             popup += "<br>" + lines.join("<br>");
@@ -284,27 +448,72 @@
       addMarkers(data.bp || [], bpLayer, bpStyle);
       addMarkers(data.traffic || [], trafficLayer, trafficStyle);
 
-      const circle = L.circle([data.center.lat, data.center.lon], {
-        radius: data.radius_km * 1000,
+      // Create circle around search center
+      const centerLat = data.center.lat;
+      const centerLon = data.center.lon;
+      const radiusKm = data.radius_km || 10;
+      
+      const circle = L.circle([centerLat, centerLon], {
+        radius: radiusKm * 1000,
         color: "red",
         weight: 2,
         fill: false,
+        fillOpacity: 0.1,
       }).addTo(borderLayer);
 
+      // Add center marker
+      L.marker([centerLat, centerLon], {
+        icon: L.divIcon({
+          className: 'custom-div-icon',
+          html: `<div style="background-color: red; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>`,
+          iconSize: [12, 12]
+        })
+      }).bindPopup(`<strong>Search Center: ${term}</strong>`).addTo(borderLayer);
+
+      // Add circle bounds to fit view
       const circleBounds = circle.getBounds();
       bounds.push(circleBounds.getNorthEast());
       bounds.push(circleBounds.getSouthWest());
 
-      if (bounds.length) {
-        map.fitBounds(bounds, { padding: [20, 20] });
+      // Fit map to show all markers and circle
+      if (bounds.length > 0) {
+        try {
+          map.fitBounds(bounds, { padding: [20, 20] });
+          // Force resize on mobile after fitBounds
+          setTimeout(() => {
+            map.invalidateSize();
+          }, 100);
+        } catch (e) {
+          console.warn("Error fitting bounds:", e);
+          // Fallback: just center on the search location
+          map.setView([centerLat, centerLon], 12);
+        }
+      } else {
+        // If no bounds, just center on the search location
+        map.setView([centerLat, centerLon], 12);
       }
 
-      statusEl.textContent = `Showing results within ${
-        data.radius_km
-      } km of "${term}".`;
+      // Count total results
+      const totalResults = (data.customers?.length || 0) + 
+                          (data.service?.length || 0) + 
+                          (data.bp?.length || 0) + 
+                          (data.traffic?.length || 0);
+
+      if (totalResults > 0) {
+        statusEl.textContent = `Found ${totalResults} result(s) within ${radiusKm} km of "${term}".`;
+      } else {
+        statusEl.textContent = `No results found within ${radiusKm} km of "${term}". Try increasing the radius.`;
+      }
+      statusEl.style.color = "#28a745"; // Green for success
     } catch (err) {
-      console.error(err);
-      statusEl.textContent = "Error contacting server.";
+      console.error("Search error:", err);
+      console.error("Error details:", {
+        message: err.message,
+        stack: err.stack,
+        name: err.name
+      });
+      statusEl.textContent = `Error: ${err.message || "Error contacting server. Please try again."}`;
+      statusEl.style.color = "#dc3545"; // Red for error
     }
   }
 
@@ -322,6 +531,7 @@
       termInput.value = "";
       radiusInput.value = "10";
       statusEl.textContent = "";
+      statusEl.style.color = ""; // Reset color
 
       customersLayer.clearLayers();
       serviceLayer.clearLayers();
@@ -330,6 +540,10 @@
       borderLayer.clearLayers();
 
       map.setView([4.5, 109.0], 6);
+      // Force resize on mobile
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 100);
     });
 
   document
@@ -339,6 +553,19 @@
         runSearch();
       }
     });
+
+  // Handle window resize and orientation change for mobile
+  window.addEventListener("resize", () => {
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 100);
+  });
+  
+  window.addEventListener("orientationchange", () => {
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+  });
 </script>
 {% endblock %}
 

@@ -54,6 +54,29 @@ def build_map(
             """
     <style>
       .leaflet-top.leaflet-left .leaflet-control-layers { margin-top: 60px; }
+      /* Mobile responsive fixes */
+      @media (max-width: 768px) {
+        .leaflet-control-layers { 
+          margin-top: 50px !important;
+          font-size: 12px;
+        }
+        .leaflet-control-zoom {
+          font-size: 18px;
+        }
+        .leaflet-popup-content-wrapper {
+          max-width: 250px;
+          font-size: 12px;
+        }
+        .leaflet-control-minimap {
+          width: 150px !important;
+          height: 150px !important;
+        }
+      }
+      /* Ensure map container is visible on mobile */
+      .leaflet-container {
+        touch-action: pan-x pan-y;
+        -webkit-tap-highlight-color: transparent;
+      }
     </style>
     """
         )

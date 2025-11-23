@@ -20,7 +20,7 @@ from db import (
     init_db,
 )
 from map_builder import build_map
-from map_utils import ensure_latlon, find_search_center, filter_by_radius
+from map_utils import ensure_latlon, geocode_location, filter_by_radius
 
 
 app = FastAPI(title="Selangor Map Backend")
@@ -57,7 +57,7 @@ def _query_to_df(query) -> pd.DataFrame:
 
 
 @app.get("/map", response_class=HTMLResponse)
-def map_view(db: Session = Depends(get_db)) -> HTMLResponse:
+def map_view(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     customers_df = _query_to_df(db.query(CustomerCell))
     service_df = _query_to_df(db.query(ToyotaServiceOutlet))
     bp_df = _query_to_df(db.query(ToyotaBPOutlet))
@@ -65,7 +65,70 @@ def map_view(db: Session = Depends(get_db)) -> HTMLResponse:
 
     m = build_map(customers_df, service_df, bp_df, traffic_df)
     html = m.get_root().render()
-    return HTMLResponse(content=html)
+    
+    # Inject viewport meta tag and mobile CSS if not present
+    if 'name="viewport"' not in html:
+        # Insert viewport meta tag after charset meta
+        html = html.replace(
+            '<meta http-equiv="content-type"',
+            '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />\n    <meta http-equiv="content-type"'
+        )
+    
+    # Add mobile-specific CSS
+    mobile_css = """
+    <style>
+        /* Mobile responsive fixes */
+        @media (max-width: 768px) {
+            .leaflet-control-layers {
+                font-size: 12px !important;
+            }
+            .leaflet-control-zoom {
+                font-size: 18px !important;
+            }
+            .leaflet-popup-content-wrapper {
+                max-width: 250px !important;
+                font-size: 12px !important;
+            }
+            .leaflet-control-minimap {
+                width: 150px !important;
+                height: 150px !important;
+            }
+        }
+        /* Ensure map container is visible on mobile */
+        .leaflet-container {
+            touch-action: pan-x pan-y !important;
+            -webkit-tap-highlight-color: transparent !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+        /* Ensure full height on mobile */
+        html, body {
+            height: 100% !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+        /* Ensure map div is visible */
+        #map {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            height: 100% !important;
+            width: 100% !important;
+        }
+    </style>
+    """
+    
+    # Insert mobile CSS before closing head tag
+    if '</head>' in html:
+        html = html.replace('</head>', mobile_css + '\n</head>')
+    else:
+        # If no head tag, insert at the beginning
+        html = mobile_css + html
+    
+    return templates.TemplateResponse("static_map.html", {"request": request, "map_html": html})
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -88,26 +151,24 @@ def search_locations(
     db: Session = Depends(get_db),
 ):
     """
-    Search by location name / postcode and return all nearby data:
-    customers, service outlets, BP outlets, and traffic police stations.
+    Search by location name / postcode using online geocoding (OpenStreetMap).
+    Returns all nearby data: customers, service outlets, BP outlets, and traffic police stations.
     """
+    # Get coordinates from internet geocoding service (NOT from your database)
+    center = geocode_location(term)
+    if center is None:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Location '{term}' not found. Please try a different location name or postcode."
+        )
+
+    center_lat, center_lon = center
+
+    # Now filter your database results by radius around the geocoded location
     customers_df = ensure_latlon(_query_to_df(db.query(CustomerCell)))
     service_df = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)))
     bp_df = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)))
     traffic_df = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)))
-
-    dfs = {
-        "customers": customers_df,
-        "service": service_df,
-        "bp": bp_df,
-        "traffic": traffic_df,
-    }
-
-    center = find_search_center(term, dfs)
-    if center is None:
-        raise HTTPException(status_code=404, detail=f"No matches found for '{term}'")
-
-    center_lat, center_lon = center
 
     customers_df = filter_by_radius(customers_df, center_lat, center_lon, radius_km)
     service_df = filter_by_radius(service_df, center_lat, center_lon, radius_km)

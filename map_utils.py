@@ -4,6 +4,7 @@ import folium
 from folium.plugins import HeatMap, MarkerCluster, Fullscreen, MiniMap, MousePosition, MeasureControl
 from pathlib import Path
 from typing import Dict, Optional, Tuple
+import requests
 
 # ---------- SETTINGS ----------
 DATA_DIR = Path(__file__).parent
@@ -199,6 +200,50 @@ def filter_by_radius(
     return df.loc[mask].copy()
 
 
+def geocode_location(term: str) -> Optional[Tuple[float, float]]:
+    """
+    Use OpenStreetMap Nominatim to geocode a location name or postcode.
+    Returns (lat, lon) if found, None otherwise.
+    
+    This gets coordinates directly from the internet, not from your database.
+    """
+    term = (term or "").strip()
+    if not term:
+        return None
+
+    # OpenStreetMap Nominatim (free, no API key needed)
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {
+        "q": term,
+        "format": "json",
+        "limit": 1,
+        "countrycodes": "my",  # Restrict to Malaysia (optional, remove if you want worldwide)
+        "addressdetails": 1,
+    }
+    headers = {
+        "User-Agent": "SelangorMapApp/1.0"  # Required by Nominatim usage policy
+    }
+
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        if not data or len(data) == 0:
+            return None
+            
+        # Get the first result
+        result = data[0]
+        lat = float(result["lat"])
+        lon = float(result["lon"])
+        
+        log(f"Geocoded '{term}' -> ({lat}, {lon})")
+        return (lat, lon)
+    except Exception as e:
+        log(f"[ERROR] Geocoding failed for '{term}': {e}")
+        return None
+
+
 def find_search_center(
     term: str,
     dfs: Dict[str, pd.DataFrame],
@@ -209,6 +254,10 @@ def find_search_center(
     Looks in columns like postcode, city, outlet_name, station_name, name
     (case-insensitive). Returns the first matching row with valid coords,
     or None if no match.
+    
+    NOTE: This function is kept for backward compatibility but is no longer
+    used by the main search endpoint. The search endpoint now uses geocode_location()
+    to get coordinates from online services.
     """
     term = (term or "").strip()
     if not term:
