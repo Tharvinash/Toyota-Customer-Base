@@ -64,71 +64,36 @@ def map_view(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     traffic_df = _query_to_df(db.query(TrafficPoliceStation))
 
     m = build_map(customers_df, service_df, bp_df, traffic_df)
-    html = m.get_root().render()
+    full_html = m.get_root().render()
     
-    # Inject viewport meta tag and mobile CSS if not present
-    if 'name="viewport"' not in html:
-        # Insert viewport meta tag after charset meta
-        html = html.replace(
-            '<meta http-equiv="content-type"',
-            '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />\n    <meta http-equiv="content-type"'
-        )
+    # Extract content from Folium's HTML document
+    import re
     
-    # Add mobile-specific CSS
-    mobile_css = """
-    <style>
-        /* Mobile responsive fixes */
-        @media (max-width: 768px) {
-            .leaflet-control-layers {
-                font-size: 12px !important;
-            }
-            .leaflet-control-zoom {
-                font-size: 18px !important;
-            }
-            .leaflet-popup-content-wrapper {
-                max-width: 250px !important;
-                font-size: 12px !important;
-            }
-            .leaflet-control-minimap {
-                width: 150px !important;
-                height: 150px !important;
-            }
-        }
-        /* Ensure map container is visible on mobile */
-        .leaflet-container {
-            touch-action: pan-x pan-y !important;
-            -webkit-tap-highlight-color: transparent !important;
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-        }
-        /* Ensure full height on mobile */
-        html, body {
-            height: 100% !important;
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-        }
-        /* Ensure map div is visible */
-        #map {
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            height: 100% !important;
-            width: 100% !important;
-        }
-    </style>
-    """
+    # Extract everything from <head> (CSS links, styles, etc.)
+    head_match = re.search(r'<head[^>]*>(.*?)</head>', full_html, re.DOTALL | re.IGNORECASE)
+    head_content = head_match.group(1) if head_match else ""
     
-    # Insert mobile CSS before closing head tag
-    if '</head>' in html:
-        html = html.replace('</head>', mobile_css + '\n</head>')
-    else:
-        # If no head tag, insert at the beginning
-        html = mobile_css + html
+    # Extract everything from <body> (map div, scripts, etc.)
+    body_match = re.search(r'<body[^>]*>(.*?)</body>', full_html, re.DOTALL | re.IGNORECASE)
+    body_content = body_match.group(1) if body_match else full_html
     
-    return templates.TemplateResponse("static_map.html", {"request": request, "map_html": html})
+    # Extract CSS links from head
+    css_links = re.findall(r'<link[^>]*>', head_content, re.IGNORECASE)
+    
+    # Extract style tags from head
+    head_styles = re.findall(r'<style[^>]*>.*?</style>', head_content, re.DOTALL)
+    
+    # Extract all scripts (from both head and body)
+    all_scripts = re.findall(r'<script[^>]*>.*?</script>', full_html, re.DOTALL)
+    
+    # Combine: CSS links, styles, body content, then scripts
+    # This ensures proper loading order
+    map_html = '\n'.join(css_links + head_styles + [body_content] + all_scripts)
+    
+    return templates.TemplateResponse("static_map.html", {
+        "request": request, 
+        "map_html": map_html
+    })
 
 
 @app.get("/", response_class=HTMLResponse)

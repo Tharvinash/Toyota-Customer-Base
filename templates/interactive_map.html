@@ -4,6 +4,11 @@
 
 {% block content %}
 <style>
+  /* Ensure navbar has proper spacing */
+  .navbar {
+    margin-bottom: 1.5rem !important;
+  }
+  
   /* Mobile-specific fixes for map visibility */
   @media (max-width: 768px) {
     main.container {
@@ -14,7 +19,7 @@
       margin-right: 0 !important;
     }
     .navbar {
-      margin-bottom: 0.5rem !important;
+      margin-bottom: 1rem !important;
     }
     #map-container {
       height: calc(100vh - 180px) !important;
