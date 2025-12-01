@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 
 import pandas as pd
@@ -21,7 +21,6 @@ from db import (
 )
 from map_utils import (
     ensure_latlon,
-    geocode_location,
     geocode_location_with_details,
     geocode_multiple_locations,
     filter_by_radius,
@@ -64,6 +63,177 @@ def _query_to_df(query) -> pd.DataFrame:
     return pd.DataFrame.from_records(records)
 
 
+MAX_SEARCH_TERMS = 10
+
+MALAYSIAN_STATE_LOOKUP: Dict[str, str] = {
+    "johor": "Johor",
+    "kedah": "Kedah",
+    "kelantan": "Kelantan",
+    "melaka": "Melaka",
+    "malacca": "Melaka",
+    "negeri sembilan": "Negeri Sembilan",
+    "pahang": "Pahang",
+    "penang": "Pulau Pinang",
+    "pulau pinang": "Pulau Pinang",
+    "perak": "Perak",
+    "perlis": "Perlis",
+    "sabah": "Sabah",
+    "sarawak": "Sarawak",
+    "selangor": "Selangor",
+    "terengganu": "Terengganu",
+    "kuala lumpur": "Kuala Lumpur",
+    "wilayah persekutuan kuala lumpur": "Kuala Lumpur",
+    "wp kuala lumpur": "Kuala Lumpur",
+    "labuan": "Labuan",
+    "wilayah persekutuan labuan": "Labuan",
+    "wp labuan": "Labuan",
+    "putrajaya": "Putrajaya",
+    "wilayah persekutuan putrajaya": "Putrajaya",
+    "wp putrajaya": "Putrajaya",
+}
+
+
+def _normalize_text(value: str) -> str:
+    cleaned = value.strip().lower()
+    if cleaned.endswith(", malaysia"):
+        cleaned = cleaned[:-10].strip()
+    cleaned = cleaned.replace(".", " ")
+    cleaned = cleaned.replace("-", " ")
+    return " ".join(cleaned.split())
+
+
+def _normalize_state_name(raw: str) -> Optional[str]:
+    normalized = _normalize_text(raw)
+    return MALAYSIAN_STATE_LOOKUP.get(normalized)
+
+
+def _parse_search_terms(raw_terms: str) -> List[str]:
+    terms = [t.strip() for t in raw_terms.split(",") if t.strip()]
+    if not terms:
+        raise HTTPException(status_code=400, detail="Please provide at least one search term.")
+    if len(terms) > MAX_SEARCH_TERMS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum {MAX_SEARCH_TERMS} search terms allowed per request.",
+        )
+    return terms
+
+
+def _validate_search_terms(terms: List[str], search_type: str) -> List[Dict[str, str]]:
+    validated: List[Dict[str, str]] = []
+    for raw in terms:
+        if search_type == "state":
+            canonical = _normalize_state_name(raw)
+            if not canonical:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"'{raw}' is not a recognized Malaysian state or federal territory.",
+                )
+            validated.append(
+                {
+                    "raw": raw,
+                    "geocode_query": f"{canonical}, Malaysia",
+                    "display_name": canonical,
+                    "state_lower": canonical.lower(),
+                }
+            )
+        elif search_type == "postcode":
+            digits = raw.strip().replace(" ", "")
+            if not digits.isdigit() or len(digits) not in (4, 5):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Postcodes must be 4 or 5 digits: '{raw}'.",
+                )
+            validated.append(
+                {
+                    "raw": raw,
+                    "geocode_query": digits,
+                    "display_name": digits,
+                }
+            )
+        else:  # area / township
+            cleaned = raw.strip()
+            if cleaned and cleaned[0].isdigit():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Area/Township names cannot start with a number: '{raw}'.",
+                )
+            validated.append(
+                {
+                    "raw": raw,
+                    "geocode_query": cleaned,
+                    "display_name": cleaned,
+                }
+            )
+    return validated
+
+
+def _filter_df_by_states(df: pd.DataFrame, states_lower: List[str]) -> pd.DataFrame:
+    if df.empty or "state" not in df.columns:
+        return df.iloc[0:0].copy()
+    state_series = df["state"].astype(str).str.strip().str.lower()
+    mask = state_series.isin(set(states_lower))
+    return df.loc[mask].copy()
+
+
+def _append_unique_records(
+    target: List[Dict[str, Any]],
+    seen: set,
+    new_records: List[Dict[str, Any]],
+) -> None:
+    for rec in new_records:
+        lat = float(rec.get("lat", 0.0))
+        lon = float(rec.get("lon", 0.0))
+        label = rec.get("label", "")
+        postcode = rec.get("postcode", "")
+        key = (round(lat, 6), round(lon, 6), label, postcode)
+        if key not in seen:
+            seen.add(key)
+            target.append(rec)
+
+
+def _compute_bounds_from_points(points: List[List[float]]) -> Optional[List[List[float]]]:
+    if not points:
+        return None
+    lats = [p[0] for p in points]
+    lons = [p[1] for p in points]
+    return [[min(lats), min(lons)], [max(lats), max(lons)]]
+
+
+def _build_boundary_payload(
+    display_name: str,
+    polygon_feature: Optional[Dict[str, Any]],
+    admin_bounds: Optional[List[List[float]]],
+    fallback_bounds: Optional[List[List[float]]],
+    center: Tuple[float, float],
+    search_type: str,
+    radius_km: Optional[float],
+) -> Optional[Dict[str, Any]]:
+    if polygon_feature:
+        return {"type": "polygon", "feature": polygon_feature}
+    if admin_bounds:
+        rect_feature = rectangle_feature_from_bounds(
+            admin_bounds,
+            properties={"display_name": display_name, "source": "nominatim-boundingbox"},
+        )
+        if rect_feature:
+            return {"type": "rectangle", "feature": rect_feature}
+    if fallback_bounds:
+        rect_feature = rectangle_feature_from_bounds(
+            fallback_bounds,
+            properties={"display_name": display_name, "source": "data-extent"},
+        )
+        if rect_feature:
+            return {"type": "rectangle", "feature": rect_feature}
+    if search_type != "state" and radius_km:
+        return {
+            "type": "circle",
+            "center": {"lat": center[0], "lon": center[1]},
+            "radius_km": float(radius_km),
+        }
+    return None
+
+
 @app.get("/", response_class=HTMLResponse)
 def admin_home(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("admin_home.html", {"request": request})
@@ -92,64 +262,19 @@ def search_locations(
     if search_type not in ["state", "area", "postcode"]:
         raise HTTPException(status_code=400, detail="search_type must be 'state', 'area', or 'postcode'")
 
-    # Validate radius for area/postcode searches
+    terms = _parse_search_terms(term)
+    validated_terms = _validate_search_terms(terms, search_type)
+
     if search_type != "state":
         if radius_km is None or radius_km <= 0:
             raise HTTPException(status_code=400, detail="radius_km is required and must be greater than 0 for area/postcode searches")
-
-    # Get coordinates and boundaries from internet geocoding service
-    geocode_result = geocode_location_with_details(term)
-    if geocode_result is None:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Location '{term}' not found. Please try a different location name, state, area, or postcode."
-        )
-
-    center_lat = geocode_result["lat"]
-    center_lon = geocode_result["lon"]
-    display_name = geocode_result.get("display_name", term)
-    polygon_feature = extract_polygon_feature(geocode_result)
-    admin_bounds = extract_bounding_box(geocode_result)
-
-    # Load all database data
-    customers_df = ensure_latlon(_query_to_df(db.query(CustomerCell)))
-    service_df = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)))
-    bp_df = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)))
-    traffic_df = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)))
-
-    # Filter data based on search type
-    if search_type == "state":
-        # Normalize state name for matching (remove common suffixes, case-insensitive)
-        normalized_term = term.strip().lower()
-        # Remove "Malaysia" suffix if present
-        if normalized_term.endswith(", malaysia"):
-            normalized_term = normalized_term[:-10].strip()
-        
-        # Filter by state column (case-insensitive, partial match)
-        def filter_by_state(df: pd.DataFrame) -> pd.DataFrame:
-            if df.empty or "state" not in df.columns:
-                return df.copy()
-            state_col = df["state"].astype(str).str.strip().str.lower()
-            # Try exact match first
-            mask = state_col == normalized_term
-            # If no exact match, try contains match
-            if not mask.any():
-                mask = state_col.str.contains(normalized_term, case=False, na=False)
-            return df[mask].copy()
-        
-        customers_df = filter_by_state(customers_df)
-        service_df = filter_by_state(service_df)
-        bp_df = filter_by_state(bp_df)
-        traffic_df = filter_by_state(traffic_df)
-        
-        # No radius filtering for state search
-        radius_km = None
     else:
-        # Area or postcode search: apply radius filtering
-        customers_df = filter_by_radius(customers_df, center_lat, center_lon, radius_km)
-        service_df = filter_by_radius(service_df, center_lat, center_lon, radius_km)
-        bp_df = filter_by_radius(bp_df, center_lat, center_lon, radius_km)
-        traffic_df = filter_by_radius(traffic_df, center_lat, center_lon, radius_km)
+        radius_km = None
+
+    customers_base = ensure_latlon(_query_to_df(db.query(CustomerCell)))
+    service_base = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)))
+    bp_base = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)))
+    traffic_base = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)))
 
     def df_to_records(df: pd.DataFrame, layer_name: str):
         records: List[dict] = []
@@ -178,61 +303,119 @@ def search_locations(
             records.append(rec)
         return records
 
-    # Calculate fallback bounds from filtered data if no bounding box available
-    fallback_bounds = None
-    if not admin_bounds:
-        all_points = []
-        for df in [customers_df, service_df, bp_df, traffic_df]:
-            if not df.empty and "lat" in df.columns and "lon" in df.columns:
-                all_points.extend(df[["lat", "lon"]].dropna().values.tolist())
-        
-        if all_points:
-            lats = [p[0] for p in all_points]
-            lons = [p[1] for p in all_points]
-            fallback_bounds = [[min(lats), min(lons)], [max(lats), max(lons)]]
+    aggregated_records: Dict[str, List[Dict[str, Any]]] = {
+        "customers": [],
+        "service": [],
+        "bp": [],
+        "traffic": [],
+    }
+    seen_keys: Dict[str, set] = {key: set() for key in aggregated_records.keys()}
 
-    boundary_payload: Optional[Dict[str, Any]] = None
-    if polygon_feature:
-        boundary_payload = {"type": "polygon", "feature": polygon_feature}
-    elif admin_bounds:
-        rect_feature = rectangle_feature_from_bounds(
-            admin_bounds,
-            properties={
-                "display_name": display_name,
-                "source": "nominatim-boundingbox",
-            },
-        )
-        if rect_feature:
-            boundary_payload = {"type": "rectangle", "feature": rect_feature}
-    elif fallback_bounds:
-        rect_feature = rectangle_feature_from_bounds(
-            fallback_bounds,
-            properties={
-                "display_name": display_name,
-                "source": "data-extent",
-            },
-        )
-        if rect_feature:
-            boundary_payload = {"type": "rectangle", "feature": rect_feature}
+    boundaries: List[Dict[str, Any]] = []
+    failed_terms: List[Dict[str, str]] = []
 
-    if not boundary_payload and search_type != "state" and radius_km:
-        boundary_payload = {
-            "type": "circle",
-            "center": {"lat": center_lat, "lon": center_lon},
-            "radius_km": float(radius_km),
-        }
+    for term_info in validated_terms:
+        geocode_result = geocode_location_with_details(term_info["geocode_query"])
+        if not geocode_result:
+            failed_terms.append({"term": term_info["raw"], "reason": "Location not found"})
+            continue
+
+        center_lat = geocode_result["lat"]
+        center_lon = geocode_result["lon"]
+        display_name = geocode_result.get("display_name", term_info["display_name"])
+        polygon_feature = extract_polygon_feature(geocode_result)
+        admin_bounds = extract_bounding_box(geocode_result)
+
+        if search_type == "state":
+            state_lower = term_info["state_lower"]
+            customers_df = _filter_df_by_states(customers_base, [state_lower])
+            service_df = _filter_df_by_states(service_base, [state_lower])
+            bp_df = _filter_df_by_states(bp_base, [state_lower])
+            traffic_df = _filter_df_by_states(traffic_base, [state_lower])
+        else:
+            customers_df = filter_by_radius(customers_base, center_lat, center_lon, radius_km)
+            service_df = filter_by_radius(service_base, center_lat, center_lon, radius_km)
+            bp_df = filter_by_radius(bp_base, center_lat, center_lon, radius_km)
+            traffic_df = filter_by_radius(traffic_base, center_lat, center_lon, radius_km)
+
+        _append_unique_records(
+            aggregated_records["customers"],
+            seen_keys["customers"],
+            df_to_records(customers_df, "customers"),
+        )
+        _append_unique_records(
+            aggregated_records["service"],
+            seen_keys["service"],
+            df_to_records(service_df, "service"),
+        )
+        _append_unique_records(
+            aggregated_records["bp"],
+            seen_keys["bp"],
+            df_to_records(bp_df, "bp"),
+        )
+        _append_unique_records(
+            aggregated_records["traffic"],
+            seen_keys["traffic"],
+            df_to_records(traffic_df, "traffic"),
+        )
+
+        points: List[List[float]] = []
+        for df in (customers_df, service_df, bp_df, traffic_df):
+            if not df.empty and {"lat", "lon"}.issubset(df.columns):
+                points.extend(df[["lat", "lon"]].dropna().values.tolist())
+
+        fallback_bounds = None if admin_bounds else _compute_bounds_from_points(points)
+
+        if search_type == "state":
+            boundary_payload = _build_boundary_payload(
+                display_name,
+                polygon_feature,
+                admin_bounds,
+                fallback_bounds,
+                (center_lat, center_lon),
+                search_type,
+                radius_km,
+            )
+            boundary_admin = admin_bounds
+            boundary_fallback = fallback_bounds
+            boundary_radius = None
+        else:
+            boundary_payload = {
+                "type": "circle",
+                "center": {"lat": center_lat, "lon": center_lon},
+                "radius_km": float(radius_km) if radius_km else None,
+            }
+            boundary_admin = None
+            boundary_fallback = None
+            boundary_radius = float(radius_km) if radius_km else None
+
+        boundaries.append(
+            {
+                "term": term_info["raw"],
+                "display_name": display_name,
+                "center": {"lat": center_lat, "lon": center_lon},
+                "radius_km": boundary_radius,
+                "boundary": boundary_payload,
+                "admin_bounds": boundary_admin,
+                "fallback_bounds": boundary_fallback,
+            }
+        )
+
+    if not boundaries:
+        detail = "None of the locations were found."
+        if failed_terms:
+            detail = "None of the locations were found: " + ", ".join(ft["term"] for ft in failed_terms)
+        raise HTTPException(status_code=404, detail=detail)
 
     return {
         "search_type": search_type,
-        "center": {"lat": center_lat, "lon": center_lon},
         "radius_km": float(radius_km) if radius_km else None,
-        "admin_boundaries": admin_bounds,
-        "fallback_bounds": fallback_bounds,
-        "boundary": boundary_payload,
-        "customers": df_to_records(customers_df, "customers"),
-        "service": df_to_records(service_df, "service"),
-        "bp": df_to_records(bp_df, "bp"),
-        "traffic": df_to_records(traffic_df, "traffic"),
+        "boundaries": boundaries,
+        "failed_terms": failed_terms,
+        "customers": aggregated_records["customers"],
+        "service": aggregated_records["service"],
+        "bp": aggregated_records["bp"],
+        "traffic": aggregated_records["traffic"],
     }
 
 

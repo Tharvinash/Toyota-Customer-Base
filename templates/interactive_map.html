@@ -103,7 +103,7 @@
         </div>
         <div class="tips-ui" style="font-size: 12px; color: #6c757d; padding: 8px; background-color: #f8f9fa; border-radius: 4px; margin-top: 8px;">
           <strong>Tips:</strong> 
-          <span id="search-tips">For Area/Township or Postcode, enter location name or postcode (e.g., "Shah Alam" or "47300")</span>
+          <span id="search-tips">Enter comma-separated values (e.g., <code>Selangor, Kuala Lumpur</code> or <code>40400, 47300</code>).</span>
         </div>
       </div>
     </div>
@@ -311,13 +311,66 @@
     fillColor: "red",
     fillOpacity: 0.9,
   };
-  const boundaryColors = {
-    state: "#0066ff",
-    area: "#ff7a00",
-    postcode: "#8c52ff",
-    default: "#2c3e50",
+  const boundaryColors = [
+    "#ff4d4f",
+    "#1890ff",
+    "#52c41a",
+    "#fa8c16",
+    "#13c2c2",
+    "#eb2f96",
+    "#722ed1",
+    "#a0d911",
+    "#fa541c",
+    "#2f54eb",
+  ];
+  const MALAYSIAN_STATE_LOOKUP = {
+    "johor": "Johor",
+    "kedah": "Kedah",
+    "kelantan": "Kelantan",
+    "melaka": "Melaka",
+    "malacca": "Melaka",
+    "negeri sembilan": "Negeri Sembilan",
+    "pahang": "Pahang",
+    "penang": "Pulau Pinang",
+    "pulau pinang": "Pulau Pinang",
+    "perak": "Perak",
+    "perlis": "Perlis",
+    "sabah": "Sabah",
+    "sarawak": "Sarawak",
+    "selangor": "Selangor",
+    "terengganu": "Terengganu",
+    "kuala lumpur": "Kuala Lumpur",
+    "wilayah persekutuan kuala lumpur": "Kuala Lumpur",
+    "wp kuala lumpur": "Kuala Lumpur",
+    "labuan": "Labuan",
+    "wilayah persekutuan labuan": "Labuan",
+    "wp labuan": "Labuan",
+    "putrajaya": "Putrajaya",
+    "wilayah persekutuan putrajaya": "Putrajaya",
+    "wp putrajaya": "Putrajaya",
   };
   
+  const MAX_SEARCH_TERMS = 10;
+
+  function normalizeStateInput(value) {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/, malaysia$/i, "")
+      .replace(/\./g, " ")
+      .replace(/-/g, " ")
+      .replace(/\s+/g, " ");
+  }
+
+  function isValidStateInput(value) {
+    const key = normalizeStateInput(value);
+    return Boolean(MALAYSIAN_STATE_LOOKUP[key]);
+  }
+
+  function getBoundaryColor(index) {
+    return boundaryColors[index % boundaryColors.length];
+  }
+
   // Wait for DOM to be fully loaded before initializing map
   document.addEventListener('DOMContentLoaded', function() {
     // Ensure map container is visible
@@ -406,13 +459,13 @@
       const searchType = searchTypeSelect.value;
       if (searchType === "state") {
         radiusContainer.style.display = "none";
-        searchTips.textContent = 'For State, enter state name (e.g., "Selangor")';
+        searchTips.innerHTML = 'Enter Malaysian states (comma-separated), e.g., <code>Selangor, Kuala Lumpur</code>.';
       } else {
         radiusContainer.style.display = "block";
         if (searchType === "area") {
-          searchTips.textContent = 'For Area/Township, enter location name (e.g., "Shah Alam")';
+          searchTips.innerHTML = 'Enter towns/townships (comma-separated), e.g., <code>Shah Alam, Subang Jaya</code>.';
         } else {
-          searchTips.textContent = 'For Postcode, enter postcode (e.g., "47300")';
+          searchTips.innerHTML = 'Enter 4-5 digit postcodes (comma-separated), e.g., <code>40400, 47300</code>.';
         }
       }
     }
@@ -421,20 +474,15 @@
     updateSearchUI(); // Initialize on page load
   });
 
-  function getBoundaryColor(searchType) {
-    if (searchType && boundaryColors[searchType]) {
-      return boundaryColors[searchType];
-    }
-    return boundaryColors.default;
-  }
-
-  function renderBoundary(boundary, searchType) {
-    if (!boundary || !boundary.type || !boundaryLayer) {
+  function renderBoundary(boundaryPayload, color) {
+    if (!boundaryLayer || !boundaryPayload || !boundaryPayload.type) {
       return null;
     }
-    const color = getBoundaryColor(searchType);
-    if ((boundary.type === "polygon" || boundary.type === "rectangle") && boundary.feature) {
-      const geoLayer = L.geoJSON(boundary.feature, {
+    if (
+      (boundaryPayload.type === "polygon" || boundaryPayload.type === "rectangle") &&
+      boundaryPayload.feature
+    ) {
+      const geoLayer = L.geoJSON(boundaryPayload.feature, {
         interactive: false,
         style: {
           color,
@@ -445,9 +493,9 @@
       }).addTo(boundaryLayer);
       return geoLayer.getBounds();
     }
-    if (boundary.type === "circle" && boundary.center && boundary.radius_km) {
-      const circle = L.circle([boundary.center.lat, boundary.center.lon], {
-        radius: boundary.radius_km * 1000,
+    if (boundaryPayload.type === "circle" && boundaryPayload.center && boundaryPayload.radius_km) {
+      const circle = L.circle([boundaryPayload.center.lat, boundaryPayload.center.lon], {
+        radius: boundaryPayload.radius_km * 1000,
         color,
         weight: 2,
         fill: false,
@@ -473,16 +521,55 @@
       return;
     }
 
-    const term = termInput.value.trim();
+    const rawTermInput = termInput.value.trim();
     const searchType = searchTypeSelect.value;
     const radius = parseFloat(radiusInput.value);
 
-    if (!term) {
+    if (!rawTermInput) {
       statusEl.textContent = "Please enter a search term.";
       statusEl.style.color = "#dc3545"; // Red for error
       return;
     }
-    
+
+    const termList = rawTermInput.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+    if (termList.length === 0) {
+      statusEl.textContent = "Please provide at least one search term.";
+      statusEl.style.color = "#dc3545";
+      return;
+    }
+    if (termList.length > MAX_SEARCH_TERMS) {
+      statusEl.textContent = `Maximum ${MAX_SEARCH_TERMS} locations per search.`;
+      statusEl.style.color = "#dc3545";
+      return;
+    }
+
+    if (searchType === "state") {
+      const invalidStates = termList.filter((t) => !isValidStateInput(t));
+      if (invalidStates.length) {
+        statusEl.textContent = `Invalid Malaysian state(s): ${invalidStates.join(", ")}`;
+        statusEl.style.color = "#dc3545";
+        return;
+      }
+    } else if (searchType === "postcode") {
+      const invalidPostcodes = termList.filter(
+        (t) => !/^\d{4,5}$/.test(t.replace(/\s+/g, ""))
+      );
+      if (invalidPostcodes.length) {
+        statusEl.textContent = `Postcodes must be 4 or 5 digits: ${invalidPostcodes.join(", ")}`;
+        statusEl.style.color = "#dc3545";
+        return;
+      }
+    } else {
+      const invalidAreas = termList.filter((t) => /^\d/.test(t));
+      if (invalidAreas.length) {
+        statusEl.textContent = `Area/Township names cannot start with a number: ${invalidAreas.join(", ")}`;
+        statusEl.style.color = "#dc3545";
+        return;
+      }
+    }
+
+    const normalizedTerm = termList.join(", ");
+
     // Validate radius for area/postcode searches
     if (searchType !== "state" && (!radius || radius <= 0)) {
       statusEl.textContent = "Radius must be a positive number.";
@@ -496,7 +583,7 @@
     try {
       // Build API URL with search type
       const params = new URLSearchParams({
-        term: term,
+        term: normalizedTerm,
         search_type: searchType
       });
       
@@ -523,13 +610,13 @@
       const data = await resp.json();
 
       // Validate response data
-      if (!data || !data.center) {
+      if (!data || !Array.isArray(data.boundaries)) {
         throw new Error("Invalid response from server");
       }
 
-      const center = data.center;
-      if (typeof center.lat !== 'number' || typeof center.lon !== 'number') {
-        throw new Error("Invalid center coordinates in response");
+      const boundaries = data.boundaries;
+      if (!boundaries.length) {
+        throw new Error("No search areas returned by the server.");
       }
 
       // Clear all layers
@@ -623,36 +710,42 @@
       addMarkers(data.bp || [], bpLayer, bpStyle);
       addMarkers(data.traffic || [], trafficLayer, trafficStyle);
 
-      // Draw boundary outline
+      // Draw boundaries and center markers
       let mapBounds = null;
-      const boundaryBounds = renderBoundary(data.boundary, searchType);
-      if (boundaryBounds) {
-        mapBounds = boundaryBounds;
-      }
-
-      // Add center marker for reference
-      const centerMarker = L.circleMarker([center.lat, center.lon], {
-        radius: 6,
-        color: getBoundaryColor(searchType),
-        fillColor: "#ffffff",
-        fillOpacity: 1,
-        weight: 2,
-      }).bindPopup(`<strong>Search Center</strong><br>${term}`).addTo(boundaryLayer);
-      bounds.push([center.lat, center.lon]);
+      boundaries.forEach((boundaryEntry, index) => {
+        const color = getBoundaryColor(index);
+        const renderedBounds = renderBoundary(boundaryEntry.boundary, color);
+        if (renderedBounds) {
+          if (!mapBounds) {
+            mapBounds = renderedBounds;
+          } else {
+            mapBounds.extend(renderedBounds);
+          }
+        }
+        if (
+          boundaryEntry.center &&
+          typeof boundaryEntry.center.lat === "number" &&
+          typeof boundaryEntry.center.lon === "number"
+        ) {
+          L.circleMarker([boundaryEntry.center.lat, boundaryEntry.center.lon], {
+            radius: 6,
+            color,
+            fillColor: "#ffffff",
+            fillOpacity: 1,
+            weight: 2,
+          })
+            .bindPopup(
+              `<strong>${boundaryEntry.display_name || boundaryEntry.term}</strong>`
+            )
+            .addTo(boundaryLayer);
+          bounds.push([boundaryEntry.center.lat, boundaryEntry.center.lon]);
+        }
+      });
 
       // Fallback bounds if no boundary from API
       if (!mapBounds) {
-        if (data.admin_boundaries && Array.isArray(data.admin_boundaries) && data.admin_boundaries.length === 2) {
-          mapBounds = L.latLngBounds(data.admin_boundaries);
-        } else if (data.fallback_bounds && Array.isArray(data.fallback_bounds) && data.fallback_bounds.length === 2) {
-          mapBounds = L.latLngBounds(data.fallback_bounds);
-        } else if (bounds.length > 0) {
+        if (bounds.length > 0) {
           mapBounds = L.latLngBounds(bounds);
-        } else if (searchType !== "state" && data.radius_km) {
-          const fallbackCircle = L.circle([center.lat, center.lon], {
-            radius: data.radius_km * 1000,
-          });
-          mapBounds = fallbackCircle.getBounds();
         }
       }
 
@@ -665,11 +758,13 @@
           }, 100);
         } catch (e) {
           console.warn("Error fitting bounds:", e);
-          map.setView([center.lat, center.lon], 12);
         }
+      } else if (bounds.length > 0) {
+        map.setView(bounds[0], 12);
+      } else if (boundaries[0]?.center) {
+        map.setView([boundaries[0].center.lat, boundaries[0].center.lon], 12);
       } else {
-        // Fallback: center on search location
-        map.setView([center.lat, center.lon], 12);
+        map.setView([4.5, 109.0], 6);
       }
 
       // Count total results
@@ -679,16 +774,24 @@
                           (data.traffic?.length || 0);
 
       // Build status message
-      let statusMsg = "";
-      if (searchType === "state") {
-        statusMsg = `Found ${totalResults} result(s) in "${term}"`;
-      } else {
-        const radiusText = data.radius_km ? ` within ${data.radius_km} km` : "";
-        if (totalResults > 0) {
-          statusMsg = `Found ${totalResults} result(s)${radiusText} of "${term}".`;
-        } else {
-          statusMsg = `No results found${radiusText} of "${term}". Try increasing the radius.`;
+      let statusMsg;
+      if (totalResults > 0) {
+        statusMsg = `Found ${totalResults} result(s) across ${boundaries.length} location(s).`;
+        if (searchType !== "state" && data.radius_km) {
+          statusMsg += ` (radius ${data.radius_km} km)`;
         }
+      } else {
+        statusMsg = `No results found across ${boundaries.length} location(s).`;
+        if (searchType !== "state" && data.radius_km) {
+          statusMsg += ` Try increasing the radius (currently ${data.radius_km} km).`;
+        }
+      }
+      const failedTerms = Array.isArray(data.failed_terms) ? data.failed_terms : [];
+      if (failedTerms.length) {
+        const failedList = failedTerms
+          .map((ft) => (ft.reason ? `${ft.term} (${ft.reason})` : ft.term))
+          .join(", ");
+        statusMsg += ` | ${failedTerms.length} location(s) not found: ${failedList}`;
       }
       
       statusEl.textContent = statusMsg;
