@@ -25,6 +25,7 @@ python migrate_from_csv.py
 4. Start the FastAPI app:
 
 ```bash
+.\.venv\Scripts\activate
 uvicorn main:app --reload
 ```
 

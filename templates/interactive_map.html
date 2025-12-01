@@ -66,21 +66,33 @@
     <div class="card">
       <div class="card-body">
         <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+          <select
+            id="search-type"
+            class="form-select me-2"
+            style="max-width: 150px;"
+          >
+            <option value="state">State</option>
+            <option value="area" selected>Area/Township</option>
+            <option value="postcode">Postcode</option>
+          </select>
           <input
             id="search-term"
             class="form-control me-2"
-            placeholder=""
+            placeholder="Enter state, area, or postcode"
             style="max-width: 400px;"
           />
-          <input
-            id="search-radius"
-            class="form-control me-2"
-            type="number"
-            value="10"
-            min="1"
-            max="100"
-            style="max-width: 120px;"
-          />
+          <div id="radius-container" class="me-2">
+            <input
+              id="search-radius"
+              class="form-control"
+              type="number"
+              value="10"
+              min="1"
+              max="100"
+              style="max-width: 120px;"
+              placeholder="Radius (km)"
+            />
+          </div>
           <button id="search-btn" class="btn btn-primary me-2">
             Search
           </button>
@@ -90,7 +102,8 @@
           <span id="search-status" class="text-muted small"></span>
         </div>
         <div class="tips-ui" style="font-size: 12px; color: #6c757d; padding: 8px; background-color: #f8f9fa; border-radius: 4px; margin-top: 8px;">
-          <strong>Tips:</strong> Enter location(s) or postcode(s), e.g., <code>47300, 40000, Shah Alam</code> (comma-separated for multiple locations)
+          <strong>Tips:</strong> 
+          <span id="search-tips">For Area/Township or Postcode, enter location name or postcode (e.g., "Shah Alam" or "47300")</span>
         </div>
       </div>
     </div>
@@ -119,6 +132,7 @@
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
       min-width: 230px;
       max-width: calc(100% - 24px);
+      pointer-events: auto;
     "
   >
     <div style="font-weight: 600; margin-bottom: 6px">Legend</div>
@@ -264,10 +278,13 @@
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
   crossorigin=""
 ></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script>
   // Declare map variable globally
   let map;
-  let customersLayer, serviceLayer, bpLayer, trafficLayer, borderLayer;
+  let heatmapLayer;
+  let customersLayer, serviceLayer, bpLayer, trafficLayer, boundaryLayer;
+  let layerControl;
   
   // Define marker styles globally so they're accessible everywhere
   const customerStyle = {
@@ -294,6 +311,12 @@
     fillColor: "red",
     fillOpacity: 0.9,
   };
+  const boundaryColors = {
+    state: "#0066ff",
+    area: "#ff7a00",
+    postcode: "#8c52ff",
+    default: "#2c3e50",
+  };
   
   // Wait for DOM to be fully loaded before initializing map
   document.addEventListener('DOMContentLoaded', function() {
@@ -307,7 +330,13 @@
       mapDiv.style.opacity = '1';
     }
     
-    // Initialize map with mobile-friendly settings
+    // Malaysia bounds: [south_lat, west_lon], [north_lat, east_lon]
+    const malaysiaBounds = L.latLngBounds(
+      [0.85, 99.5],  // Southwest corner
+      [7.5, 119.5]   // Northeast corner
+    );
+    
+    // Initialize map with mobile-friendly settings and restrict to Malaysia
     map = L.map("map", {
       touchZoom: true,
       doubleClickZoom: true,
@@ -315,8 +344,15 @@
       keyboard: true,
       scrollWheelZoom: true,
       dragging: true,
-      tap: true
+      tap: true,
+      maxBounds: malaysiaBounds,
+      maxBoundsViscosity: 1.0  // Prevents panning outside bounds
     }).setView([4.5, 109.0], 6);
+    
+    // Ensure initial view is within Malaysia bounds
+    if (!malaysiaBounds.contains(map.getCenter())) {
+      map.setView([4.5, 109.0], 6);
+    }
     
     // Force map to resize on mobile after initialization
     setTimeout(() => {
@@ -338,29 +374,99 @@
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
-    // Initialize customersLayer but don't add to map (hidden)
-    customersLayer = L.layerGroup();
+    // Initialize layers
+    heatmapLayer = null; // Will be created when data is available
+    customersLayer = L.layerGroup().addTo(map);
     serviceLayer = L.layerGroup().addTo(map);
     bpLayer = L.layerGroup().addTo(map);
     trafficLayer = L.layerGroup().addTo(map);
-    borderLayer = L.layerGroup().addTo(map);
+    boundaryLayer = L.layerGroup().addTo(map);
 
-    L.control
-      .layers(null, {
-        "Toyota Service Outlets": serviceLayer,
-        "Toyota Body & Paint": bpLayer,
-        "Traffic Police Stations": trafficLayer,
-      })
-      .addTo(map);
+    // Create layer control with all layers
+    const baseLayers = {};
+    const overlayLayers = {
+      "Customer Density": customersLayer,
+      "Toyota Service Outlets": serviceLayer,
+      "Toyota Body & Paint": bpLayer,
+      "Traffic Police Stations": trafficLayer,
+      "Search Boundary": boundaryLayer,
+    };
+    
+    layerControl = L.control.layers(baseLayers, overlayLayers, {
+      collapsed: false,
+      position: "topleft"
+    }).addTo(map);
+
+    // Show/hide radius input based on search type
+    const searchTypeSelect = document.getElementById("search-type");
+    const radiusContainer = document.getElementById("radius-container");
+    const searchTips = document.getElementById("search-tips");
+    
+    function updateSearchUI() {
+      const searchType = searchTypeSelect.value;
+      if (searchType === "state") {
+        radiusContainer.style.display = "none";
+        searchTips.textContent = 'For State, enter state name (e.g., "Selangor")';
+      } else {
+        radiusContainer.style.display = "block";
+        if (searchType === "area") {
+          searchTips.textContent = 'For Area/Township, enter location name (e.g., "Shah Alam")';
+        } else {
+          searchTips.textContent = 'For Postcode, enter postcode (e.g., "47300")';
+        }
+      }
+    }
+    
+    searchTypeSelect.addEventListener("change", updateSearchUI);
+    updateSearchUI(); // Initialize on page load
   });
+
+  function getBoundaryColor(searchType) {
+    if (searchType && boundaryColors[searchType]) {
+      return boundaryColors[searchType];
+    }
+    return boundaryColors.default;
+  }
+
+  function renderBoundary(boundary, searchType) {
+    if (!boundary || !boundary.type || !boundaryLayer) {
+      return null;
+    }
+    const color = getBoundaryColor(searchType);
+    if ((boundary.type === "polygon" || boundary.type === "rectangle") && boundary.feature) {
+      const geoLayer = L.geoJSON(boundary.feature, {
+        interactive: false,
+        style: {
+          color,
+          weight: 2,
+          fillColor: color,
+          fillOpacity: 0.08,
+        },
+      }).addTo(boundaryLayer);
+      return geoLayer.getBounds();
+    }
+    if (boundary.type === "circle" && boundary.center && boundary.radius_km) {
+      const circle = L.circle([boundary.center.lat, boundary.center.lon], {
+        radius: boundary.radius_km * 1000,
+        color,
+        weight: 2,
+        fill: false,
+        dashArray: "6 4",
+        interactive: false,
+      }).addTo(boundaryLayer);
+      return circle.getBounds();
+    }
+    return null;
+  }
 
   async function runSearch() {
     const termInput = document.getElementById("search-term");
     const radiusInput = document.getElementById("search-radius");
+    const searchTypeSelect = document.getElementById("search-type");
     const statusEl = document.getElementById("search-status");
 
     // Check if map and layers are initialized
-    if (!map || !customersLayer || !serviceLayer || !bpLayer || !trafficLayer || !borderLayer) {
+    if (!map || !customersLayer || !serviceLayer || !bpLayer || !trafficLayer || !boundaryLayer) {
       statusEl.textContent = "Map is still loading. Please wait...";
       statusEl.style.color = "#dc3545"; // Red for error
       setTimeout(() => runSearch(), 500); // Retry after 500ms
@@ -368,47 +474,45 @@
     }
 
     const term = termInput.value.trim();
+    const searchType = searchTypeSelect.value;
     const radius = parseFloat(radiusInput.value);
 
     if (!term) {
-      statusEl.textContent = "Please enter a location or postcode.";
+      statusEl.textContent = "Please enter a search term.";
       statusEl.style.color = "#dc3545"; // Red for error
       return;
     }
-    if (!radius || radius <= 0) {
+    
+    // Validate radius for area/postcode searches
+    if (searchType !== "state" && (!radius || radius <= 0)) {
       statusEl.textContent = "Radius must be a positive number.";
       statusEl.style.color = "#dc3545"; // Red for error
       return;
     }
 
-    // Check if multiple terms (comma-separated)
-    const hasMultiple = term.includes(",");
-    const termCount = hasMultiple ? term.split(",").filter(t => t.trim()).length : 1;
-    
-    if (hasMultiple && termCount > 10) {
-      statusEl.textContent = "Maximum 10 locations allowed per search.";
-      statusEl.style.color = "#dc3545"; // Red for error
-      return;
-    }
-
-    statusEl.textContent = hasMultiple 
-      ? `Geocoding ${termCount} location(s)... This may take a moment.`
-      : "Searching...";
+    statusEl.textContent = "Searching...";
     statusEl.style.color = "#6c757d"; // Gray for loading
 
     try {
-      // Use appropriate endpoint based on whether multiple terms
-      const url = hasMultiple
-        ? `/api/search-multiple?terms=${encodeURIComponent(term)}&radius_km=${encodeURIComponent(radius)}`
-        : `/api/search?term=${encodeURIComponent(term)}&radius_km=${encodeURIComponent(radius)}`;
+      // Build API URL with search type
+      const params = new URLSearchParams({
+        term: term,
+        search_type: searchType
+      });
+      
+      if (searchType !== "state") {
+        params.append("radius_km", radius.toString());
+      }
+      
+      const url = `/api/search?${params.toString()}`;
       const resp = await fetch(url);
 
       if (!resp.ok) {
-        let detail = "Location not found. Please try a different name or postcode.";
+        let detail = "Location not found. Please try a different search term.";
         try {
-          const data = await resp.json();
-          if (data && data.detail) {
-            detail = data.detail;
+          const errorData = await resp.json();
+          if (errorData && errorData.detail) {
+            detail = errorData.detail;
           }
         } catch (e) {}
         statusEl.textContent = detail;
@@ -419,32 +523,71 @@
       const data = await resp.json();
 
       // Validate response data
-      if (!data) {
+      if (!data || !data.center) {
         throw new Error("Invalid response from server");
       }
 
-      // Handle both single search (center) and multiple search (centers) responses
-      const centers = data.centers || (data.center ? [data.center] : []);
-      
-      if (centers.length === 0) {
-        throw new Error("No center coordinates in response");
+      const center = data.center;
+      if (typeof center.lat !== 'number' || typeof center.lon !== 'number') {
+        throw new Error("Invalid center coordinates in response");
       }
 
-      // Validate all centers have valid coordinates
-      for (const center of centers) {
-        if (!center || typeof center.lat !== 'number' || typeof center.lon !== 'number') {
-          throw new Error("Invalid center coordinates in response");
-        }
-      }
-
+      // Clear all layers
       customersLayer.clearLayers();
       serviceLayer.clearLayers();
       bpLayer.clearLayers();
       trafficLayer.clearLayers();
-      borderLayer.clearLayers();
+      boundaryLayer.clearLayers();
+      heatmapLayer = null;
 
       const bounds = [];
 
+      // Create heatmap from customer data
+      const customers = data.customers || [];
+      if (customers.length > 0) {
+        // Aggregate customer data by lat/lon and sum weights
+        const heatmapData = {};
+        customers.forEach(customer => {
+          const key = `${customer.lat.toFixed(4)},${customer.lon.toFixed(4)}`;
+          if (!heatmapData[key]) {
+            heatmapData[key] = {
+              lat: customer.lat,
+              lon: customer.lon,
+              weight: 0
+            };
+          }
+          const weightValue = Number(customer.weight);
+          const contribution = Number.isFinite(weightValue) ? weightValue : 1;
+          heatmapData[key].weight += contribution;
+        });
+
+        // Convert to array format for Leaflet.heat: [[lat, lon, intensity], ...]
+        const heatmapPoints = Object.values(heatmapData).map(point => [
+          point.lat,
+          point.lon,
+          point.weight
+        ]);
+
+        // Create heatmap layer
+        heatmapLayer = L.heatLayer(heatmapPoints, {
+          radius: 25,
+          blur: 15,
+          maxZoom: 17,
+          gradient: {
+            0.0: '#2b83ba',
+            0.25: '#80bfab',
+            0.5: '#ffffbf',
+            0.75: '#fdae61',
+            1.0: '#d7191c'
+          },
+          max: Math.max(...Object.values(heatmapData).map(p => p.weight), 1)
+        });
+        
+        // Add to customersLayer so it can be toggled
+        customersLayer.addLayer(heatmapLayer);
+      }
+
+      // Add markers for other layers
       function addMarkers(items, layer, style) {
         if (!Array.isArray(items)) return;
         items.forEach((item) => {
@@ -452,9 +595,9 @@
             console.warn("Invalid marker data:", item);
             return;
           }
+
           const latlng = [item.lat, item.lon];
           bounds.push(latlng);
-
           const marker = L.circleMarker(latlng, style || {});
           const props = { ...item };
           delete props.lat;
@@ -476,93 +619,75 @@
         });
       }
 
-      // Customers layer is disabled - don't add markers
-      // addMarkers(data.customers || [], customersLayer, customerStyle);
       addMarkers(data.service || [], serviceLayer, serviceStyle);
       addMarkers(data.bp || [], bpLayer, bpStyle);
       addMarkers(data.traffic || [], trafficLayer, trafficStyle);
 
-      // centers is already defined in validation above
-      const radiusKm = data.radius_km || 10;
-      const colors = ["red", "blue", "green", "orange", "purple", "cyan", "magenta", "yellow", "pink", "brown"];
-      
-      if (centers.length === 0) {
-        throw new Error("No center coordinates in response");
+      // Draw boundary outline
+      let mapBounds = null;
+      const boundaryBounds = renderBoundary(data.boundary, searchType);
+      if (boundaryBounds) {
+        mapBounds = boundaryBounds;
       }
 
-      // Create circles and markers for each center
-      centers.forEach((center, index) => {
-        const centerLat = center.lat;
-        const centerLon = center.lon;
-        const centerTerm = center.term || term;
-        const color = colors[index % colors.length];
-        
-        // Create circle around search center
-        const circle = L.circle([centerLat, centerLon], {
-          radius: radiusKm * 1000,
-          color: color,
-          weight: 2,
-          fill: false,
-          fillOpacity: 0.1,
-        }).addTo(borderLayer);
+      // Add center marker for reference
+      const centerMarker = L.circleMarker([center.lat, center.lon], {
+        radius: 6,
+        color: getBoundaryColor(searchType),
+        fillColor: "#ffffff",
+        fillOpacity: 1,
+        weight: 2,
+      }).bindPopup(`<strong>Search Center</strong><br>${term}`).addTo(boundaryLayer);
+      bounds.push([center.lat, center.lon]);
 
-        // Add center marker
-        L.marker([centerLat, centerLon], {
-          icon: L.divIcon({
-            className: 'custom-div-icon',
-            html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>`,
-            iconSize: [12, 12]
-          })
-        }).bindPopup(`<strong>Search Center: ${centerTerm}</strong>`).addTo(borderLayer);
+      // Fallback bounds if no boundary from API
+      if (!mapBounds) {
+        if (data.admin_boundaries && Array.isArray(data.admin_boundaries) && data.admin_boundaries.length === 2) {
+          mapBounds = L.latLngBounds(data.admin_boundaries);
+        } else if (data.fallback_bounds && Array.isArray(data.fallback_bounds) && data.fallback_bounds.length === 2) {
+          mapBounds = L.latLngBounds(data.fallback_bounds);
+        } else if (bounds.length > 0) {
+          mapBounds = L.latLngBounds(bounds);
+        } else if (searchType !== "state" && data.radius_km) {
+          const fallbackCircle = L.circle([center.lat, center.lon], {
+            radius: data.radius_km * 1000,
+          });
+          mapBounds = fallbackCircle.getBounds();
+        }
+      }
 
-        // Add circle bounds to fit view
-        const circleBounds = circle.getBounds();
-        bounds.push(circleBounds.getNorthEast());
-        bounds.push(circleBounds.getSouthWest());
-      });
-
-      // Fit map to show all markers and circle
-      if (bounds.length > 0) {
+      // Fit map to bounds
+      if (mapBounds) {
         try {
-          map.fitBounds(bounds, { padding: [20, 20] });
-          // Force resize on mobile after fitBounds
+          map.fitBounds(mapBounds, { padding: [20, 20] });
           setTimeout(() => {
             map.invalidateSize();
           }, 100);
         } catch (e) {
           console.warn("Error fitting bounds:", e);
-          // Fallback: just center on the first search location
-          if (centers.length > 0) {
-            map.setView([centers[0].lat, centers[0].lon], 12);
-          }
+          map.setView([center.lat, center.lon], 12);
         }
       } else {
-        // If no bounds, just center on the first search location
-        if (centers.length > 0) {
-          map.setView([centers[0].lat, centers[0].lon], 12);
-        }
+        // Fallback: center on search location
+        map.setView([center.lat, center.lon], 12);
       }
 
-      // Count total results (excluding customers - they're hidden)
-      const totalResults = (data.service?.length || 0) + 
+      // Count total results
+      const totalResults = (data.customers?.length || 0) + 
+                          (data.service?.length || 0) + 
                           (data.bp?.length || 0) + 
                           (data.traffic?.length || 0);
 
       // Build status message
       let statusMsg = "";
-      if (centers.length > 1) {
-        // Multiple centers
-        statusMsg = `Found ${totalResults} result(s) within ${radiusKm} km of ${centers.length} location(s)`;
-        if (data.failed_terms && data.failed_terms.length > 0) {
-          statusMsg += ` (${data.failed_terms.length} location(s) not found: ${data.failed_terms.join(", ")})`;
-        }
-        statusMsg += ".";
+      if (searchType === "state") {
+        statusMsg = `Found ${totalResults} result(s) in "${term}"`;
       } else {
-        // Single center
+        const radiusText = data.radius_km ? ` within ${data.radius_km} km` : "";
         if (totalResults > 0) {
-          statusMsg = `Found ${totalResults} result(s) within ${radiusKm} km of "${term}".`;
+          statusMsg = `Found ${totalResults} result(s)${radiusText} of "${term}".`;
         } else {
-          statusMsg = `No results found within ${radiusKm} km of "${term}". Try increasing the radius.`;
+          statusMsg = `No results found${radiusText} of "${term}". Try increasing the radius.`;
         }
       }
       
@@ -570,11 +695,6 @@
       statusEl.style.color = "#28a745"; // Green for success
     } catch (err) {
       console.error("Search error:", err);
-      console.error("Error details:", {
-        message: err.message,
-        stack: err.stack,
-        name: err.name
-      });
       statusEl.textContent = `Error: ${err.message || "Error contacting server. Please try again."}`;
       statusEl.style.color = "#dc3545"; // Red for error
     }
@@ -596,11 +716,17 @@
       statusEl.textContent = "";
       statusEl.style.color = ""; // Reset color
 
+      // Remove heatmap if it exists
+      if (heatmapLayer) {
+        map.removeLayer(heatmapLayer);
+        heatmapLayer = null;
+      }
+      
       customersLayer.clearLayers();
       serviceLayer.clearLayers();
       bpLayer.clearLayers();
       trafficLayer.clearLayers();
-      borderLayer.clearLayers();
+      boundaryLayer.clearLayers();
 
       map.setView([4.5, 109.0], 6);
       // Force resize on mobile
@@ -631,5 +757,6 @@
   });
 </script>
 {% endblock %}
+
 
 

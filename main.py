@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 import pandas as pd
@@ -19,8 +19,16 @@ from db import (
     get_db,
     init_db,
 )
-from map_builder import build_map
-from map_utils import ensure_latlon, geocode_location, geocode_multiple_locations, filter_by_radius
+from map_utils import (
+    ensure_latlon,
+    geocode_location,
+    geocode_location_with_details,
+    geocode_multiple_locations,
+    filter_by_radius,
+    extract_bounding_box,
+    extract_polygon_feature,
+    rectangle_feature_from_bounds,
+)
 
 
 app = FastAPI(title="Selangor Map Backend")
@@ -56,53 +64,6 @@ def _query_to_df(query) -> pd.DataFrame:
     return pd.DataFrame.from_records(records)
 
 
-@app.get("/map", response_class=HTMLResponse)
-def map_view(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    customers_df = _query_to_df(db.query(CustomerCell))
-    service_df = _query_to_df(db.query(ToyotaServiceOutlet))
-    bp_df = _query_to_df(db.query(ToyotaBPOutlet))
-    traffic_df = _query_to_df(db.query(TrafficPoliceStation))
-
-    m = build_map(customers_df, service_df, bp_df, traffic_df)
-    full_html = m.get_root().render()
-    
-    # Extract content from Folium's HTML document
-    import re
-    
-    # Extract everything from <head> (CSS links, styles, etc.)
-    head_match = re.search(r'<head[^>]*>(.*?)</head>', full_html, re.DOTALL | re.IGNORECASE)
-    head_content = head_match.group(1) if head_match else ""
-    
-    # Extract everything from <body> (map div, scripts, etc.)
-    body_match = re.search(r'<body[^>]*>(.*?)</body>', full_html, re.DOTALL | re.IGNORECASE)
-    body_content = body_match.group(1) if body_match else full_html
-    
-    # Extract CSS links from head, but exclude Bootstrap (we already have it in base.html)
-    all_css_links = re.findall(r'<link[^>]*>', head_content, re.IGNORECASE)
-    css_links = [link for link in all_css_links if 'bootstrap' not in link.lower()]
-    
-    # Extract style tags from head, but filter out global html/body styles that might conflict
-    all_head_styles = re.findall(r'<style[^>]*>.*?</style>', head_content, re.DOTALL)
-    # Keep only styles that don't affect global html/body layout
-    head_styles = []
-    for style in all_head_styles:
-        # Exclude styles that set global html/body margins/padding
-        if not re.search(r'html\s*,\s*body\s*\{[^}]*margin|html\s*,\s*body\s*\{[^}]*padding', style, re.IGNORECASE):
-            head_styles.append(style)
-    
-    # Extract all scripts (from both head and body)
-    all_scripts = re.findall(r'<script[^>]*>.*?</script>', full_html, re.DOTALL)
-    
-    # Combine: CSS links, styles, body content, then scripts
-    # This ensures proper loading order
-    map_html = '\n'.join(css_links + head_styles + [body_content] + all_scripts)
-    
-    return templates.TemplateResponse("static_map.html", {
-        "request": request, 
-        "map_html": map_html
-    })
-
-
 @app.get("/", response_class=HTMLResponse)
 def admin_home(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("admin_home.html", {"request": request})
@@ -118,34 +79,77 @@ def interactive_map(request: Request) -> HTMLResponse:
 
 @app.get("/api/search")
 def search_locations(
-    term: str = Query(..., min_length=1, description="Location name or postcode"),
-    radius_km: float = Query(10.0, gt=0, le=100, description="Search radius in kilometers"),
+    term: str = Query(..., min_length=1, description="Location name, state, area/township, or postcode"),
+    search_type: str = Query("area", description="Search type: state, area, or postcode"),
+    radius_km: float | None = Query(10.0, gt=0, le=100, description="Search radius in kilometers (only for area/postcode)"),
     db: Session = Depends(get_db),
 ):
     """
-    Search by location name / postcode using online geocoding (OpenStreetMap).
+    Search by state, area/township, or postcode using online geocoding (OpenStreetMap).
     Returns all nearby data: customers, service outlets, BP outlets, and traffic police stations.
     """
-    # Get coordinates from internet geocoding service (NOT from your database)
-    center = geocode_location(term)
-    if center is None:
+    search_type = search_type.lower().strip()
+    if search_type not in ["state", "area", "postcode"]:
+        raise HTTPException(status_code=400, detail="search_type must be 'state', 'area', or 'postcode'")
+
+    # Validate radius for area/postcode searches
+    if search_type != "state":
+        if radius_km is None or radius_km <= 0:
+            raise HTTPException(status_code=400, detail="radius_km is required and must be greater than 0 for area/postcode searches")
+
+    # Get coordinates and boundaries from internet geocoding service
+    geocode_result = geocode_location_with_details(term)
+    if geocode_result is None:
         raise HTTPException(
             status_code=404, 
-            detail=f"Location '{term}' not found. Please try a different location name or postcode."
+            detail=f"Location '{term}' not found. Please try a different location name, state, area, or postcode."
         )
 
-    center_lat, center_lon = center
+    center_lat = geocode_result["lat"]
+    center_lon = geocode_result["lon"]
+    display_name = geocode_result.get("display_name", term)
+    polygon_feature = extract_polygon_feature(geocode_result)
+    admin_bounds = extract_bounding_box(geocode_result)
 
-    # Now filter your database results by radius around the geocoded location
+    # Load all database data
     customers_df = ensure_latlon(_query_to_df(db.query(CustomerCell)))
     service_df = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)))
     bp_df = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)))
     traffic_df = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)))
 
-    customers_df = filter_by_radius(customers_df, center_lat, center_lon, radius_km)
-    service_df = filter_by_radius(service_df, center_lat, center_lon, radius_km)
-    bp_df = filter_by_radius(bp_df, center_lat, center_lon, radius_km)
-    traffic_df = filter_by_radius(traffic_df, center_lat, center_lon, radius_km)
+    # Filter data based on search type
+    if search_type == "state":
+        # Normalize state name for matching (remove common suffixes, case-insensitive)
+        normalized_term = term.strip().lower()
+        # Remove "Malaysia" suffix if present
+        if normalized_term.endswith(", malaysia"):
+            normalized_term = normalized_term[:-10].strip()
+        
+        # Filter by state column (case-insensitive, partial match)
+        def filter_by_state(df: pd.DataFrame) -> pd.DataFrame:
+            if df.empty or "state" not in df.columns:
+                return df.copy()
+            state_col = df["state"].astype(str).str.strip().str.lower()
+            # Try exact match first
+            mask = state_col == normalized_term
+            # If no exact match, try contains match
+            if not mask.any():
+                mask = state_col.str.contains(normalized_term, case=False, na=False)
+            return df[mask].copy()
+        
+        customers_df = filter_by_state(customers_df)
+        service_df = filter_by_state(service_df)
+        bp_df = filter_by_state(bp_df)
+        traffic_df = filter_by_state(traffic_df)
+        
+        # No radius filtering for state search
+        radius_km = None
+    else:
+        # Area or postcode search: apply radius filtering
+        customers_df = filter_by_radius(customers_df, center_lat, center_lon, radius_km)
+        service_df = filter_by_radius(service_df, center_lat, center_lon, radius_km)
+        bp_df = filter_by_radius(bp_df, center_lat, center_lon, radius_km)
+        traffic_df = filter_by_radius(traffic_df, center_lat, center_lon, radius_km)
 
     def df_to_records(df: pd.DataFrame, layer_name: str):
         records: List[dict] = []
@@ -174,9 +178,57 @@ def search_locations(
             records.append(rec)
         return records
 
+    # Calculate fallback bounds from filtered data if no bounding box available
+    fallback_bounds = None
+    if not admin_bounds:
+        all_points = []
+        for df in [customers_df, service_df, bp_df, traffic_df]:
+            if not df.empty and "lat" in df.columns and "lon" in df.columns:
+                all_points.extend(df[["lat", "lon"]].dropna().values.tolist())
+        
+        if all_points:
+            lats = [p[0] for p in all_points]
+            lons = [p[1] for p in all_points]
+            fallback_bounds = [[min(lats), min(lons)], [max(lats), max(lons)]]
+
+    boundary_payload: Optional[Dict[str, Any]] = None
+    if polygon_feature:
+        boundary_payload = {"type": "polygon", "feature": polygon_feature}
+    elif admin_bounds:
+        rect_feature = rectangle_feature_from_bounds(
+            admin_bounds,
+            properties={
+                "display_name": display_name,
+                "source": "nominatim-boundingbox",
+            },
+        )
+        if rect_feature:
+            boundary_payload = {"type": "rectangle", "feature": rect_feature}
+    elif fallback_bounds:
+        rect_feature = rectangle_feature_from_bounds(
+            fallback_bounds,
+            properties={
+                "display_name": display_name,
+                "source": "data-extent",
+            },
+        )
+        if rect_feature:
+            boundary_payload = {"type": "rectangle", "feature": rect_feature}
+
+    if not boundary_payload and search_type != "state" and radius_km:
+        boundary_payload = {
+            "type": "circle",
+            "center": {"lat": center_lat, "lon": center_lon},
+            "radius_km": float(radius_km),
+        }
+
     return {
+        "search_type": search_type,
         "center": {"lat": center_lat, "lon": center_lon},
-        "radius_km": float(radius_km),
+        "radius_km": float(radius_km) if radius_km else None,
+        "admin_boundaries": admin_bounds,
+        "fallback_bounds": fallback_bounds,
+        "boundary": boundary_payload,
         "customers": df_to_records(customers_df, "customers"),
         "service": df_to_records(service_df, "service"),
         "bp": df_to_records(bp_df, "bp"),

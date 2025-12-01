@@ -3,7 +3,7 @@ import numpy as np
 import folium
 from folium.plugins import HeatMap, MarkerCluster, Fullscreen, MiniMap, MousePosition, MeasureControl
 from pathlib import Path
-from typing import Dict, Optional, Tuple, List
+from typing import Any, Dict, Optional, Tuple, List
 import requests
 import time
 
@@ -208,6 +208,19 @@ def geocode_location(term: str) -> Optional[Tuple[float, float]]:
     
     This gets coordinates directly from the internet, not from your database.
     """
+    result = geocode_location_with_details(term)
+    if result:
+        return (result["lat"], result["lon"])
+    return None
+
+
+def geocode_location_with_details(term: str) -> Optional[dict]:
+    """
+    Use OpenStreetMap Nominatim to geocode a location name or postcode.
+    Returns dict with 'lat', 'lon', 'boundingbox', and 'display_name' if found, None otherwise.
+    
+    This gets coordinates and boundary information directly from the internet.
+    """
     term = (term or "").strip()
     if not term:
         return None
@@ -220,6 +233,7 @@ def geocode_location(term: str) -> Optional[Tuple[float, float]]:
         "limit": 1,
         "countrycodes": "my",  # Restrict to Malaysia (optional, remove if you want worldwide)
         "addressdetails": 1,
+        "polygon_geojson": 1,  # Request polygon geometry when available
     }
     headers = {
         "User-Agent": "SelangorMapApp/1.0"  # Required by Nominatim usage policy
@@ -237,12 +251,127 @@ def geocode_location(term: str) -> Optional[Tuple[float, float]]:
         result = data[0]
         lat = float(result["lat"])
         lon = float(result["lon"])
+        boundingbox = result.get("boundingbox", [])
+        display_name = result.get("display_name", term)
+        polygon_geojson = result.get("geojson")
         
         log(f"Geocoded '{term}' -> ({lat}, {lon})")
-        return (lat, lon)
+        return {
+            "lat": lat,
+            "lon": lon,
+            "boundingbox": boundingbox,
+            "display_name": display_name,
+            "polygon_geojson": polygon_geojson,
+            "polygon_feature": geojson_feature_from_polygon(
+                polygon_geojson,
+                properties={"display_name": display_name},
+            ),
+            "raw_result": result
+        }
     except Exception as e:
         log(f"[ERROR] Geocoding failed for '{term}': {e}")
         return None
+
+
+def extract_bounding_box(geocode_result: dict) -> Optional[List[List[float]]]:
+    """
+    Extract bounding box from geocoding result and convert to Leaflet bounds format.
+    Returns [[south_lat, west_lon], [north_lat, east_lon]] or None if not available.
+    """
+    if not geocode_result or "boundingbox" not in geocode_result:
+        return None
+    
+    bbox = geocode_result["boundingbox"]
+    if not bbox or len(bbox) != 4:
+        return None
+    
+    try:
+        # Nominatim boundingbox format: [south_lat, north_lat, west_lon, east_lon]
+        south_lat = float(bbox[0])
+        north_lat = float(bbox[1])
+        west_lon = float(bbox[2])
+        east_lon = float(bbox[3])
+        
+        # Convert to Leaflet bounds format: [[south_lat, west_lon], [north_lat, east_lon]]
+        return [[south_lat, west_lon], [north_lat, east_lon]]
+    except (ValueError, IndexError) as e:
+        log(f"[ERROR] Failed to parse bounding box: {e}")
+        return None
+
+
+def geojson_feature_from_polygon(
+    polygon: Optional[Dict[str, Any]],
+    properties: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Wrap a raw polygon/multipolygon geometry (lon/lat) into a GeoJSON Feature.
+    """
+    if not polygon or not isinstance(polygon, dict):
+        return None
+    geometry_type = polygon.get("type")
+    if geometry_type not in {"Polygon", "MultiPolygon"}:
+        return None
+    coordinates = polygon.get("coordinates")
+    if not coordinates:
+        return None
+    return {
+        "type": "Feature",
+        "properties": properties or {},
+        "geometry": {
+            "type": geometry_type,
+            "coordinates": coordinates,
+        },
+    }
+
+
+def rectangle_feature_from_bounds(
+    bounds: Optional[List[List[float]]],
+    properties: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Build a GeoJSON rectangle polygon Feature from [[south, west], [north, east]] bounds.
+    """
+    if not bounds or len(bounds) != 2:
+        return None
+    (south, west), (north, east) = bounds
+    try:
+        south = float(south)
+        west = float(west)
+        north = float(north)
+        east = float(east)
+    except (TypeError, ValueError):
+        return None
+
+    ring = [
+        [west, south],
+        [east, south],
+        [east, north],
+        [west, north],
+        [west, south],
+    ]
+    return {
+        "type": "Feature",
+        "properties": properties or {},
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [ring],
+        },
+    }
+
+
+def extract_polygon_feature(geocode_result: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Convenience helper to extract a GeoJSON Feature from a full geocode result dict.
+    """
+    if not geocode_result:
+        return None
+    polygon = geocode_result.get("polygon_geojson")
+    if not polygon and geocode_result.get("raw_result"):
+        polygon = geocode_result["raw_result"].get("geojson")
+    return geojson_feature_from_polygon(
+        polygon,
+        properties={"display_name": geocode_result.get("display_name", "")},
+    )
 
 
 def geocode_multiple_locations(terms: List[str], delay_seconds: float = 1.2) -> List[dict]:
@@ -265,20 +394,28 @@ def geocode_multiple_locations(terms: List[str], delay_seconds: float = 1.2) -> 
         if i > 0:  # Don't delay before first request
             time.sleep(delay_seconds)  # Respect 1 request/second limit
         
-        center = geocode_location(term)
-        if center:
+        geocode_result = geocode_location_with_details(term)
+        if geocode_result:
             results.append({
                 "term": term,
-                "lat": center[0],
-                "lon": center[1],
+                "lat": geocode_result["lat"],
+                "lon": geocode_result["lon"],
+                "boundingbox": geocode_result.get("boundingbox"),
+                "display_name": geocode_result.get("display_name", term),
+                "polygon_geojson": geocode_result.get("polygon_geojson"),
+                "polygon_feature": geocode_result.get("polygon_feature"),
                 "success": True
             })
-            log(f"✓ Geocoded '{term}' -> ({center[0]}, {center[1]})")
+            log(f"✓ Geocoded '{term}' -> ({geocode_result['lat']}, {geocode_result['lon']})")
         else:
             results.append({
                 "term": term,
                 "lat": None,
                 "lon": None,
+                "boundingbox": None,
+                "display_name": None,
+                "polygon_geojson": None,
+                "polygon_feature": None,
                 "success": False
             })
             log(f"✗ Failed to geocode '{term}'")
