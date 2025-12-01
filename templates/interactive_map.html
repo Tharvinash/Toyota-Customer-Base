@@ -1,14 +1,11 @@
-{% extends "base.html" %}
-
-{% block title %}Interactive Map{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}Interactive Map{% endblock %} {%
+block content %}
 <style>
   /* Ensure navbar has proper spacing */
   .navbar {
     margin-bottom: 1.5rem !important;
   }
-  
+
   /* Mobile-specific fixes for map visibility */
   @media (max-width: 768px) {
     main.container {
@@ -69,7 +66,7 @@
           <select
             id="search-type"
             class="form-select me-2"
-            style="max-width: 150px;"
+            style="max-width: 150px"
           >
             <option value="state">State</option>
             <option value="area" selected>Area/Township</option>
@@ -79,7 +76,7 @@
             id="search-term"
             class="form-control me-2"
             placeholder="Enter state, area, or postcode"
-            style="max-width: 400px;"
+            style="max-width: 400px"
           />
           <div id="radius-container" class="me-2">
             <input
@@ -89,21 +86,33 @@
               value="10"
               min="1"
               max="100"
-              style="max-width: 120px;"
+              style="max-width: 120px"
               placeholder="Radius (km)"
             />
           </div>
-          <button id="search-btn" class="btn btn-primary me-2">
-            Search
-          </button>
+          <button id="search-btn" class="btn btn-primary me-2">Search</button>
           <button id="clear-btn" class="btn btn-outline-secondary me-2">
             Clear
           </button>
           <span id="search-status" class="text-muted small"></span>
         </div>
-        <div class="tips-ui" style="font-size: 12px; color: #6c757d; padding: 8px; background-color: #f8f9fa; border-radius: 4px; margin-top: 8px;">
-          <strong>Tips:</strong> 
-          <span id="search-tips">Enter comma-separated values (e.g., <code>Selangor, Kuala Lumpur</code> or <code>40400, 47300</code>).</span>
+        <div
+          class="tips-ui"
+          style="
+            font-size: 12px;
+            color: #6c757d;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            margin-top: 8px;
+          "
+        >
+          <strong>Tips:</strong>
+          <span id="search-tips"
+            >Enter comma-separated values (e.g.,
+            <code>Selangor, Kuala Lumpur</code> or
+            <code>40400, 47300</code>).</span
+          >
         </div>
       </div>
     </div>
@@ -112,9 +121,15 @@
 
 <div
   id="map-container"
-  style="position: relative; height: 70vh; min-height: 400px; border-radius: 8px; overflow: hidden;"
+  style="
+    position: relative;
+    height: 70vh;
+    min-height: 400px;
+    border-radius: 8px;
+    overflow: hidden;
+  "
 >
-  <div id="map" style="height: 100%; width: 100%;"></div>
+  <div id="map" style="height: 100%; width: 100%"></div>
 
   <!-- Legend copied from static map styling for consistent UX -->
   <div
@@ -152,73 +167,7 @@
     </div>
     <hr style="margin: 8px 0" />
     <div style="font-weight: 600; margin-bottom: 4px">Customer Density</div>
-    <div style="line-height: 1.4">
-      <div style="display: flex; align-items: center; margin: 2px 0">
-        <span
-          style="
-            display: inline-block;
-            width: 18px;
-            height: 12px;
-            background: #2b83ba;
-            border: 1px solid #666;
-            margin-right: 8px;
-          "
-        ></span>
-        <span style="font-size: 12px">Low</span>
-      </div>
-      <div style="display: flex; align-items: center; margin: 2px 0">
-        <span
-          style="
-            display: inline-block;
-            width: 18px;
-            height: 12px;
-            background: #80bfab;
-            border: 1px solid #666;
-            margin-right: 8px;
-          "
-        ></span>
-        <span style="font-size: 12px">Med-Low</span>
-      </div>
-      <div style="display: flex; align-items: center; margin: 2px 0">
-        <span
-          style="
-            display: inline-block;
-            width: 18px;
-            height: 12px;
-            background: #ffffbf;
-            border: 1px solid #666;
-            margin-right: 8px;
-          "
-        ></span>
-        <span style="font-size: 12px">Medium</span>
-      </div>
-      <div style="display: flex; align-items: center; margin: 2px 0">
-        <span
-          style="
-            display: inline-block;
-            width: 18px;
-            height: 12px;
-            background: #fdae61;
-            border: 1px solid #666;
-            margin-right: 8px;
-          "
-        ></span>
-        <span style="font-size: 12px">Med-High</span>
-      </div>
-      <div style="display: flex; align-items: center; margin: 2px 0">
-        <span
-          style="
-            display: inline-block;
-            width: 18px;
-            height: 12px;
-            background: #d7191c;
-            border: 1px solid #666;
-            margin-right: 8px;
-          "
-        ></span>
-        <span style="font-size: 12px">High</span>
-      </div>
-    </div>
+    <div id="density-legend-ranges" style="line-height: 1.4"></div>
   </div>
 </div>
 
@@ -283,9 +232,14 @@
   // Declare map variable globally
   let map;
   let heatmapLayer;
-  let customersLayer, serviceLayer, bpLayer, trafficLayer, boundaryLayer;
+  let customersLayer,
+    customerCirclesLayer,
+    serviceLayer,
+    bpLayer,
+    trafficLayer,
+    boundaryLayer;
   let layerControl;
-  
+
   // Define marker styles globally so they're accessible everywhere
   const customerStyle = {
     radius: 7,
@@ -323,33 +277,41 @@
     "#fa541c",
     "#2f54eb",
   ];
+  const densityBuckets = [
+    { max: 1000, label: "< 1,000", color: "#2b83ba" },
+    { min: 1001, max: 2000, label: "1,001 – 2,000", color: "#80bfab" },
+    { min: 2001, max: 3000, label: "2,001 – 3,000", color: "#ffffbf" },
+    { min: 3001, max: 4000, label: "3,001 – 4,000", color: "#fdae61" },
+    { min: 4001, max: 5000, label: "4,001 – 5,000", color: "#f46d43" },
+    { min: 5001, label: "> 5,000", color: "#d7191c" },
+  ];
   const MALAYSIAN_STATE_LOOKUP = {
-    "johor": "Johor",
-    "kedah": "Kedah",
-    "kelantan": "Kelantan",
-    "melaka": "Melaka",
-    "malacca": "Melaka",
+    johor: "Johor",
+    kedah: "Kedah",
+    kelantan: "Kelantan",
+    melaka: "Melaka",
+    malacca: "Melaka",
     "negeri sembilan": "Negeri Sembilan",
-    "pahang": "Pahang",
-    "penang": "Pulau Pinang",
+    pahang: "Pahang",
+    penang: "Pulau Pinang",
     "pulau pinang": "Pulau Pinang",
-    "perak": "Perak",
-    "perlis": "Perlis",
-    "sabah": "Sabah",
-    "sarawak": "Sarawak",
-    "selangor": "Selangor",
-    "terengganu": "Terengganu",
+    perak: "Perak",
+    perlis: "Perlis",
+    sabah: "Sabah",
+    sarawak: "Sarawak",
+    selangor: "Selangor",
+    terengganu: "Terengganu",
     "kuala lumpur": "Kuala Lumpur",
     "wilayah persekutuan kuala lumpur": "Kuala Lumpur",
     "wp kuala lumpur": "Kuala Lumpur",
-    "labuan": "Labuan",
+    labuan: "Labuan",
     "wilayah persekutuan labuan": "Labuan",
     "wp labuan": "Labuan",
-    "putrajaya": "Putrajaya",
+    putrajaya: "Putrajaya",
     "wilayah persekutuan putrajaya": "Putrajaya",
     "wp putrajaya": "Putrajaya",
   };
-  
+
   const MAX_SEARCH_TERMS = 10;
 
   function normalizeStateInput(value) {
@@ -371,24 +333,47 @@
     return boundaryColors[index % boundaryColors.length];
   }
 
+  function renderDensityLegend() {
+    const legendContainer = document.getElementById("density-legend-ranges");
+    if (!legendContainer) return;
+    legendContainer.innerHTML = densityBuckets
+      .map(
+        (bucket) => `
+        <div style="display:flex;align-items:center;margin:2px 0;">
+          <span style="
+            display:inline-block;
+            width:18px;
+            height:12px;
+            border:1px solid #666;
+            margin-right:8px;
+            background:${bucket.color};
+          "></span>
+          <span style="font-size:12px;">${bucket.label}</span>
+        </div>
+      `
+      )
+      .join("");
+  }
+
   // Wait for DOM to be fully loaded before initializing map
-  document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener("DOMContentLoaded", function () {
+    renderDensityLegend();
     // Ensure map container is visible
-    const mapContainer = document.getElementById('map-container');
-    const mapDiv = document.getElementById('map');
+    const mapContainer = document.getElementById("map-container");
+    const mapDiv = document.getElementById("map");
     if (mapContainer && mapDiv) {
-      mapContainer.style.display = 'block';
-      mapDiv.style.display = 'block';
-      mapDiv.style.visibility = 'visible';
-      mapDiv.style.opacity = '1';
+      mapContainer.style.display = "block";
+      mapDiv.style.display = "block";
+      mapDiv.style.visibility = "visible";
+      mapDiv.style.opacity = "1";
     }
-    
+
     // Malaysia bounds: [south_lat, west_lon], [north_lat, east_lon]
     const malaysiaBounds = L.latLngBounds(
-      [0.85, 99.5],  // Southwest corner
-      [7.5, 119.5]   // Northeast corner
+      [0.85, 99.5], // Southwest corner
+      [7.5, 119.5] // Northeast corner
     );
-    
+
     // Initialize map with mobile-friendly settings and restrict to Malaysia
     map = L.map("map", {
       touchZoom: true,
@@ -399,24 +384,24 @@
       dragging: true,
       tap: true,
       maxBounds: malaysiaBounds,
-      maxBoundsViscosity: 1.0  // Prevents panning outside bounds
+      maxBoundsViscosity: 1.0, // Prevents panning outside bounds
     }).setView([4.5, 109.0], 6);
-    
+
     // Ensure initial view is within Malaysia bounds
     if (!malaysiaBounds.contains(map.getCenter())) {
       map.setView([4.5, 109.0], 6);
     }
-    
+
     // Force map to resize on mobile after initialization
     setTimeout(() => {
       map.invalidateSize();
       // Double-check visibility
       if (mapContainer) {
-        mapContainer.style.display = 'block';
-        mapContainer.style.visibility = 'visible';
+        mapContainer.style.display = "block";
+        mapContainer.style.visibility = "visible";
       }
     }, 100);
-    
+
     // Additional resize after a short delay for mobile
     setTimeout(() => {
       map.invalidateSize();
@@ -430,6 +415,7 @@
     // Initialize layers
     heatmapLayer = null; // Will be created when data is available
     customersLayer = L.layerGroup().addTo(map);
+    customerCirclesLayer = L.layerGroup().addTo(map);
     serviceLayer = L.layerGroup().addTo(map);
     bpLayer = L.layerGroup().addTo(map);
     trafficLayer = L.layerGroup().addTo(map);
@@ -438,38 +424,44 @@
     // Create layer control with all layers
     const baseLayers = {};
     const overlayLayers = {
-      "Customer Density": customersLayer,
+      "Customer Density (Heatmap)": customersLayer,
+      "Customer Density (Circles)": customerCirclesLayer,
       "Toyota Service Outlets": serviceLayer,
       "Toyota Body & Paint": bpLayer,
       "Traffic Police Stations": trafficLayer,
       "Search Boundary": boundaryLayer,
     };
-    
-    layerControl = L.control.layers(baseLayers, overlayLayers, {
-      collapsed: false,
-      position: "topleft"
-    }).addTo(map);
+
+    layerControl = L.control
+      .layers(baseLayers, overlayLayers, {
+        collapsed: false,
+        position: "topleft",
+      })
+      .addTo(map);
 
     // Show/hide radius input based on search type
     const searchTypeSelect = document.getElementById("search-type");
     const radiusContainer = document.getElementById("radius-container");
     const searchTips = document.getElementById("search-tips");
-    
+
     function updateSearchUI() {
       const searchType = searchTypeSelect.value;
       if (searchType === "state") {
         radiusContainer.style.display = "none";
-        searchTips.innerHTML = 'Enter Malaysian states (comma-separated), e.g., <code>Selangor, Kuala Lumpur</code>.';
+        searchTips.innerHTML =
+          "Enter Malaysian states (comma-separated), e.g., <code>Selangor, Kuala Lumpur</code>.";
       } else {
         radiusContainer.style.display = "block";
         if (searchType === "area") {
-          searchTips.innerHTML = 'Enter towns/townships (comma-separated), e.g., <code>Shah Alam, Subang Jaya</code>.';
+          searchTips.innerHTML =
+            "Enter towns/townships (comma-separated), e.g., <code>Shah Alam, Subang Jaya</code>.";
         } else {
-          searchTips.innerHTML = 'Enter 4-5 digit postcodes (comma-separated), e.g., <code>40400, 47300</code>.';
+          searchTips.innerHTML =
+            "Enter 4-5 digit postcodes (comma-separated), e.g., <code>40400, 47300</code>.";
         }
       }
     }
-    
+
     searchTypeSelect.addEventListener("change", updateSearchUI);
     updateSearchUI(); // Initialize on page load
   });
@@ -479,7 +471,8 @@
       return null;
     }
     if (
-      (boundaryPayload.type === "polygon" || boundaryPayload.type === "rectangle") &&
+      (boundaryPayload.type === "polygon" ||
+        boundaryPayload.type === "rectangle") &&
       boundaryPayload.feature
     ) {
       const geoLayer = L.geoJSON(boundaryPayload.feature, {
@@ -493,15 +486,22 @@
       }).addTo(boundaryLayer);
       return geoLayer.getBounds();
     }
-    if (boundaryPayload.type === "circle" && boundaryPayload.center && boundaryPayload.radius_km) {
-      const circle = L.circle([boundaryPayload.center.lat, boundaryPayload.center.lon], {
-        radius: boundaryPayload.radius_km * 1000,
-        color,
-        weight: 2,
-        fill: false,
-        dashArray: "6 4",
-        interactive: false,
-      }).addTo(boundaryLayer);
+    if (
+      boundaryPayload.type === "circle" &&
+      boundaryPayload.center &&
+      boundaryPayload.radius_km
+    ) {
+      const circle = L.circle(
+        [boundaryPayload.center.lat, boundaryPayload.center.lon],
+        {
+          radius: boundaryPayload.radius_km * 1000,
+          color,
+          weight: 2,
+          fill: false,
+          dashArray: "6 4",
+          interactive: false,
+        }
+      ).addTo(boundaryLayer);
       return circle.getBounds();
     }
     return null;
@@ -514,7 +514,14 @@
     const statusEl = document.getElementById("search-status");
 
     // Check if map and layers are initialized
-    if (!map || !customersLayer || !serviceLayer || !bpLayer || !trafficLayer || !boundaryLayer) {
+    if (
+      !map ||
+      !customersLayer ||
+      !serviceLayer ||
+      !bpLayer ||
+      !trafficLayer ||
+      !boundaryLayer
+    ) {
       statusEl.textContent = "Map is still loading. Please wait...";
       statusEl.style.color = "#dc3545"; // Red for error
       setTimeout(() => runSearch(), 500); // Retry after 500ms
@@ -531,7 +538,10 @@
       return;
     }
 
-    const termList = rawTermInput.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+    const termList = rawTermInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
     if (termList.length === 0) {
       statusEl.textContent = "Please provide at least one search term.";
       statusEl.style.color = "#dc3545";
@@ -546,7 +556,9 @@
     if (searchType === "state") {
       const invalidStates = termList.filter((t) => !isValidStateInput(t));
       if (invalidStates.length) {
-        statusEl.textContent = `Invalid Malaysian state(s): ${invalidStates.join(", ")}`;
+        statusEl.textContent = `Invalid Malaysian state(s): ${invalidStates.join(
+          ", "
+        )}`;
         statusEl.style.color = "#dc3545";
         return;
       }
@@ -555,14 +567,18 @@
         (t) => !/^\d{4,5}$/.test(t.replace(/\s+/g, ""))
       );
       if (invalidPostcodes.length) {
-        statusEl.textContent = `Postcodes must be 4 or 5 digits: ${invalidPostcodes.join(", ")}`;
+        statusEl.textContent = `Postcodes must be 4 or 5 digits: ${invalidPostcodes.join(
+          ", "
+        )}`;
         statusEl.style.color = "#dc3545";
         return;
       }
     } else {
       const invalidAreas = termList.filter((t) => /^\d/.test(t));
       if (invalidAreas.length) {
-        statusEl.textContent = `Area/Township names cannot start with a number: ${invalidAreas.join(", ")}`;
+        statusEl.textContent = `Area/Township names cannot start with a number: ${invalidAreas.join(
+          ", "
+        )}`;
         statusEl.style.color = "#dc3545";
         return;
       }
@@ -584,13 +600,13 @@
       // Build API URL with search type
       const params = new URLSearchParams({
         term: normalizedTerm,
-        search_type: searchType
+        search_type: searchType,
       });
-      
+
       if (searchType !== "state") {
         params.append("radius_km", radius.toString());
       }
-      
+
       const url = `/api/search?${params.toString()}`;
       const resp = await fetch(url);
 
@@ -621,6 +637,7 @@
 
       // Clear all layers
       customersLayer.clearLayers();
+      customerCirclesLayer.clearLayers();
       serviceLayer.clearLayers();
       bpLayer.clearLayers();
       trafficLayer.clearLayers();
@@ -632,15 +649,14 @@
       // Create heatmap from customer data
       const customers = data.customers || [];
       if (customers.length > 0) {
-        // Aggregate customer data by lat/lon and sum weights
         const heatmapData = {};
-        customers.forEach(customer => {
+        customers.forEach((customer) => {
           const key = `${customer.lat.toFixed(4)},${customer.lon.toFixed(4)}`;
           if (!heatmapData[key]) {
             heatmapData[key] = {
               lat: customer.lat,
               lon: customer.lon,
-              weight: 0
+              weight: 0,
             };
           }
           const weightValue = Number(customer.weight);
@@ -648,37 +664,97 @@
           heatmapData[key].weight += contribution;
         });
 
-        // Convert to array format for Leaflet.heat: [[lat, lon, intensity], ...]
-        const heatmapPoints = Object.values(heatmapData).map(point => [
-          point.lat,
-          point.lon,
-          point.weight
-        ]);
+        const bucketedPoints = Object.values(heatmapData).map((point) => {
+          const rawWeight = point.weight;
+          const bucket =
+            densityBuckets.find((bucket) => {
+              if (bucket.min && rawWeight < bucket.min) return false;
+              if (bucket.max && rawWeight > bucket.max) return false;
+              return true;
+            }) || densityBuckets[densityBuckets.length - 1];
 
-        // Create heatmap layer
-        heatmapLayer = L.heatLayer(heatmapPoints, {
-          radius: 25,
-          blur: 15,
-          maxZoom: 17,
-          gradient: {
-            0.0: '#2b83ba',
-            0.25: '#80bfab',
-            0.5: '#ffffbf',
-            0.75: '#fdae61',
-            1.0: '#d7191c'
-          },
-          max: Math.max(...Object.values(heatmapData).map(p => p.weight), 1)
+          let intensity;
+          if (!bucket.min) {
+            intensity = Math.min(rawWeight, bucket.max) / bucket.max;
+          } else if (!bucket.max) {
+            intensity = 1 + (rawWeight - bucket.min) / bucket.min;
+          } else {
+            intensity = (rawWeight - bucket.min) / (bucket.max - bucket.min);
+          }
+          intensity = Math.min(Math.max(intensity, 0.1), 1.0);
+
+          return {
+            lat: point.lat,
+            lon: point.lon,
+            intensity,
+            color: bucket.color,
+            label: bucket.label,
+            raw: rawWeight,
+          };
         });
-        
-        // Add to customersLayer so it can be toggled
+
+        heatmapLayer = L.heatLayer(
+          bucketedPoints.map((pt) => [pt.lat, pt.lon, pt.intensity]),
+          {
+            radius: 25,
+            blur: 15,
+            maxZoom: 17,
+            gradient: densityBuckets.reduce((grad, bucket, idx) => {
+              grad[idx / (densityBuckets.length - 1 || 1)] = bucket.color;
+              return grad;
+            }, {}),
+          }
+        );
         customersLayer.addLayer(heatmapLayer);
+
+        bucketedPoints.forEach((pt) => {
+          const radius =
+            pt.raw < 1000
+              ? 8
+              : pt.raw < 2000
+              ? 12
+              : pt.raw < 3000
+              ? 16
+              : pt.raw < 4000
+              ? 20
+              : pt.raw < 5000
+              ? 24
+              : 28;
+
+          const circle = L.circleMarker([pt.lat, pt.lon], {
+            radius,
+            color: pt.color,
+            fillColor: pt.color,
+            fillOpacity: 0.7,
+            weight: 2,
+            opacity: 0.9,
+          }).bindPopup(
+            `<strong>${
+              pt.label
+            }</strong><br>Customers: ${pt.raw.toLocaleString()}`
+          );
+          circle.addTo(customerCirclesLayer);
+          bounds.push([pt.lat, pt.lon]);
+        });
+
+        const dominantBucket = bucketedPoints.reduce(
+          (acc, pt) => (pt.raw > acc.raw ? pt : acc),
+          bucketedPoints[0]
+        );
+        if (dominantBucket) {
+          statusEl.textContent += ` | Highest density: ${dominantBucket.label}`;
+        }
       }
 
       // Add markers for other layers
       function addMarkers(items, layer, style) {
         if (!Array.isArray(items)) return;
         items.forEach((item) => {
-          if (!item || typeof item.lat !== 'number' || typeof item.lon !== 'number') {
+          if (
+            !item ||
+            typeof item.lat !== "number" ||
+            typeof item.lon !== "number"
+          ) {
             console.warn("Invalid marker data:", item);
             return;
           }
@@ -690,11 +766,11 @@
           delete props.lat;
           delete props.lon;
 
-          let popup = `<strong>${item.label || 'Location'}</strong>`;
+          let popup = `<strong>${item.label || "Location"}</strong>`;
           const lines = [];
           for (const [k, v] of Object.entries(props)) {
             if (k === "label") continue;
-            if (v !== null && v !== undefined && v !== '') {
+            if (v !== null && v !== undefined && v !== "") {
               lines.push(`<b>${k}</b>: ${v}`);
             }
           }
@@ -735,7 +811,9 @@
             weight: 2,
           })
             .bindPopup(
-              `<strong>${boundaryEntry.display_name || boundaryEntry.term}</strong>`
+              `<strong>${
+                boundaryEntry.display_name || boundaryEntry.term
+              }</strong>`
             )
             .addTo(boundaryLayer);
           bounds.push([boundaryEntry.center.lat, boundaryEntry.center.lon]);
@@ -768,10 +846,11 @@
       }
 
       // Count total results
-      const totalResults = (data.customers?.length || 0) + 
-                          (data.service?.length || 0) + 
-                          (data.bp?.length || 0) + 
-                          (data.traffic?.length || 0);
+      const totalResults =
+        (data.customers?.length || 0) +
+        (data.service?.length || 0) +
+        (data.bp?.length || 0) +
+        (data.traffic?.length || 0);
 
       // Build status message
       let statusMsg;
@@ -786,19 +865,23 @@
           statusMsg += ` Try increasing the radius (currently ${data.radius_km} km).`;
         }
       }
-      const failedTerms = Array.isArray(data.failed_terms) ? data.failed_terms : [];
+      const failedTerms = Array.isArray(data.failed_terms)
+        ? data.failed_terms
+        : [];
       if (failedTerms.length) {
         const failedList = failedTerms
           .map((ft) => (ft.reason ? `${ft.term} (${ft.reason})` : ft.term))
           .join(", ");
         statusMsg += ` | ${failedTerms.length} location(s) not found: ${failedList}`;
       }
-      
+
       statusEl.textContent = statusMsg;
       statusEl.style.color = "#28a745"; // Green for success
     } catch (err) {
       console.error("Search error:", err);
-      statusEl.textContent = `Error: ${err.message || "Error contacting server. Please try again."}`;
+      statusEl.textContent = `Error: ${
+        err.message || "Error contacting server. Please try again."
+      }`;
       statusEl.style.color = "#dc3545"; // Red for error
     }
   }
@@ -807,44 +890,40 @@
     .getElementById("search-btn")
     .addEventListener("click", () => runSearch());
 
-  document
-    .getElementById("clear-btn")
-    .addEventListener("click", () => {
-      const termInput = document.getElementById("search-term");
-      const radiusInput = document.getElementById("search-radius");
-      const statusEl = document.getElementById("search-status");
+  document.getElementById("clear-btn").addEventListener("click", () => {
+    const termInput = document.getElementById("search-term");
+    const radiusInput = document.getElementById("search-radius");
+    const statusEl = document.getElementById("search-status");
 
-      termInput.value = "";
-      radiusInput.value = "10";
-      statusEl.textContent = "";
-      statusEl.style.color = ""; // Reset color
+    termInput.value = "";
+    radiusInput.value = "10";
+    statusEl.textContent = "";
+    statusEl.style.color = ""; // Reset color
 
-      // Remove heatmap if it exists
-      if (heatmapLayer) {
-        map.removeLayer(heatmapLayer);
-        heatmapLayer = null;
-      }
-      
-      customersLayer.clearLayers();
-      serviceLayer.clearLayers();
-      bpLayer.clearLayers();
-      trafficLayer.clearLayers();
-      boundaryLayer.clearLayers();
+    // Remove heatmap if it exists
+    if (heatmapLayer) {
+      map.removeLayer(heatmapLayer);
+      heatmapLayer = null;
+    }
 
-      map.setView([4.5, 109.0], 6);
-      // Force resize on mobile
-      setTimeout(() => {
-        map.invalidateSize();
-      }, 100);
-    });
+    customersLayer.clearLayers();
+    serviceLayer.clearLayers();
+    bpLayer.clearLayers();
+    trafficLayer.clearLayers();
+    boundaryLayer.clearLayers();
 
-  document
-    .getElementById("search-term")
-    .addEventListener("keyup", (e) => {
-      if (e.key === "Enter") {
-        runSearch();
-      }
-    });
+    map.setView([4.5, 109.0], 6);
+    // Force resize on mobile
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 100);
+  });
+
+  document.getElementById("search-term").addEventListener("keyup", (e) => {
+    if (e.key === "Enter") {
+      runSearch();
+    }
+  });
 
   // Handle window resize and orientation change for mobile
   window.addEventListener("resize", () => {
@@ -852,7 +931,7 @@
       map.invalidateSize();
     }, 100);
   });
-  
+
   window.addEventListener("orientationchange", () => {
     setTimeout(() => {
       map.invalidateSize();
@@ -860,6 +939,3 @@
   });
 </script>
 {% endblock %}
-
-
-
