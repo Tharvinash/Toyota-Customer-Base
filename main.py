@@ -551,6 +551,44 @@ def create_service_outlet(
     return RedirectResponse("/admin/service-outlets", status_code=303)
 
 
+@app.get("/admin/service-outlets/{outlet_id}/edit", response_class=HTMLResponse)
+def edit_service_outlet_form(
+    outlet_id: int, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    outlet = db.get(ToyotaServiceOutlet, outlet_id)
+    if not outlet:
+        raise HTTPException(status_code=404, detail="Service outlet not found")
+    return templates.TemplateResponse(
+        "service_outlet_edit.html", {"request": request, "outlet": outlet}
+    )
+
+
+@app.post("/admin/service-outlets/{outlet_id}/edit")
+def update_service_outlet(
+    outlet_id: int,
+    request: Request,
+    outlet_name: str = Form(...),
+    city: str = Form(""),
+    state: str = Form(""),
+    postcode: str = Form(""),
+    lat: float | None = Form(None),
+    lon: float | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    outlet = db.get(ToyotaServiceOutlet, outlet_id)
+    if not outlet:
+        raise HTTPException(status_code=404, detail="Service outlet not found")
+
+    outlet.outlet_name = outlet_name
+    outlet.city = city
+    outlet.state = state
+    outlet.postcode = postcode
+    outlet.lat = lat
+    outlet.lon = lon
+    db.commit()
+    return RedirectResponse("/admin/service-outlets", status_code=303)
+
+
 @app.get("/admin/bp-outlets", response_class=HTMLResponse)
 def list_bp_outlets(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     outlets = db.query(ToyotaBPOutlet).order_by(ToyotaBPOutlet.id).all()
@@ -590,6 +628,45 @@ def create_bp_outlet(
     return RedirectResponse("/admin/bp-outlets", status_code=303)
 
 
+@app.get("/admin/bp-outlets/{outlet_id}/edit", response_class=HTMLResponse)
+def edit_bp_outlet_form(
+    outlet_id: int, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    outlet = db.get(ToyotaBPOutlet, outlet_id)
+    if not outlet:
+        raise HTTPException(status_code=404, detail="Body & Paint outlet not found")
+    return templates.TemplateResponse(
+        "bp_outlet_edit.html",
+        {"request": request, "outlet": outlet},
+    )
+
+
+@app.post("/admin/bp-outlets/{outlet_id}/edit")
+def update_bp_outlet(
+    outlet_id: int,
+    request: Request,
+    outlet_name: str = Form(...),
+    city: str = Form(""),
+    state: str = Form(""),
+    postcode: str = Form(""),
+    lat: float | None = Form(None),
+    lon: float | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    outlet = db.get(ToyotaBPOutlet, outlet_id)
+    if not outlet:
+        raise HTTPException(status_code=404, detail="Body & Paint outlet not found")
+
+    outlet.outlet_name = outlet_name
+    outlet.city = city
+    outlet.state = state
+    outlet.postcode = postcode
+    outlet.lat = lat
+    outlet.lon = lon
+    db.commit()
+    return RedirectResponse("/admin/bp-outlets", status_code=303)
+
+
 @app.get("/admin/traffic-stations", response_class=HTMLResponse)
 def list_traffic_stations(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     stations = db.query(TrafficPoliceStation).order_by(TrafficPoliceStation.id).all()
@@ -625,6 +702,45 @@ def create_traffic_station(
         email=email,
     )
     db.add(station)
+    db.commit()
+    return RedirectResponse("/admin/traffic-stations", status_code=303)
+
+
+@app.get("/admin/traffic-stations/{station_id}/edit", response_class=HTMLResponse)
+def edit_traffic_station_form(
+    station_id: int, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    station = db.get(TrafficPoliceStation, station_id)
+    if not station:
+        raise HTTPException(status_code=404, detail="Traffic station not found")
+    return templates.TemplateResponse(
+        "traffic_station_edit.html",
+        {"request": request, "station": station},
+    )
+
+
+@app.post("/admin/traffic-stations/{station_id}/edit")
+def update_traffic_station(
+    station_id: int,
+    request: Request,
+    station_name: str = Form(...),
+    city: str = Form(""),
+    state: str = Form(""),
+    postcode: str = Form(""),
+    lat: float | None = Form(None),
+    lon: float | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    station = db.get(TrafficPoliceStation, station_id)
+    if not station:
+        raise HTTPException(status_code=404, detail="Traffic station not found")
+
+    station.station_name = station_name
+    station.city = city
+    station.state = state
+    station.postcode = postcode
+    station.lat = lat
+    station.lon = lon
     db.commit()
     return RedirectResponse("/admin/traffic-stations", status_code=303)
 
