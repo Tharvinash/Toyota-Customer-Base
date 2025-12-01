@@ -1,8 +1,5 @@
-{% extends "base.html" %}
-
-{% block title %}Edit Traffic Station{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}Edit Traffic Station{% endblock %} {%
+block content %}
 <div class="row justify-content-center">
   <div class="col-md-6 col-lg-5">
     <h2 class="mb-3">Edit Traffic Station</h2>
@@ -19,11 +16,19 @@
       <div class="row">
         <div class="col-md-4 mb-2">
           <label class="form-label">City</label>
-          <input name="city" class="form-control" value="{{ station.city or '' }}" />
+          <input
+            name="city"
+            class="form-control"
+            value="{{ station.city or '' }}"
+          />
         </div>
         <div class="col-md-4 mb-2">
           <label class="form-label">State</label>
-          <input name="state" class="form-control" value="{{ station.state or '' }}" />
+          <input
+            name="state"
+            class="form-control"
+            value="{{ station.state or '' }}"
+          />
         </div>
         <div class="col-md-4 mb-2">
           <label class="form-label">Postcode</label>
@@ -64,5 +69,3 @@
   </div>
 </div>
 {% endblock %}
-
-
