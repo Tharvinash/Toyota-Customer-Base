@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
+import json
 
 import pandas as pd
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -46,6 +47,116 @@ if static_dir.exists():
 @app.get("/health", response_class=HTMLResponse)
 def health() -> str:
     return "OK"
+
+
+@app.get("/api/master-data")
+def get_master_data():
+    """Return the master.json data for cascading dropdowns."""
+    master_file = BASE_DIR / "data" / "master.json"
+    if not master_file.exists():
+        raise HTTPException(status_code=404, detail="Master data file not found")
+    with open(master_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data
+
+
+@app.get("/api/search-filtered")
+def search_filtered(
+    state: Optional[str] = Query(None, description="State name"),
+    city: Optional[str] = Query(None, description="City name"),
+    postcode: Optional[str] = Query(None, description="Postcode"),
+    db: Session = Depends(get_db),
+):
+    """
+    Filter data by state, city, and/or postcode from the database.
+    If a filter is not provided, all records for that level are returned.
+    """
+    customers_base = ensure_latlon(_query_to_df(db.query(CustomerCell)))
+    service_base = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)))
+    bp_base = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)))
+    traffic_base = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)))
+
+    def filter_df(df: pd.DataFrame, state_val: Optional[str], city_val: Optional[str], postcode_val: Optional[str]) -> pd.DataFrame:
+        """Filter DataFrame by state, city, and postcode."""
+        result = df.copy()
+        
+        if state_val and "state" in result.columns:
+            result = result[result["state"].astype(str).str.strip().str.lower() == state_val.lower()]
+        
+        if city_val and "city" in result.columns:
+            result = result[result["city"].astype(str).str.strip().str.lower() == city_val.lower()]
+        
+        if postcode_val and "postcode" in result.columns:
+            # Normalize postcode (remove spaces, handle string/numeric)
+            postcode_norm = str(postcode_val).replace(" ", "").strip()
+            result = result.copy()
+            result["postcode_norm"] = result["postcode"].astype(str).str.replace(" ", "").str.strip()
+            result = result[result["postcode_norm"] == postcode_norm]
+            result = result.drop(columns=["postcode_norm"])
+        
+        return result
+
+    customers_df = filter_df(customers_base, state, city, postcode)
+    service_df = filter_df(service_base, state, city, postcode)
+    bp_df = filter_df(bp_base, state, city, postcode)
+    traffic_df = filter_df(traffic_base, state, city, postcode)
+
+    def df_to_records(df: pd.DataFrame, layer_name: str):
+        records: List[dict] = []
+        if df.empty:
+            return records
+
+        for _, row in df.iterrows():
+            label = (
+                row.get("outlet_name")
+                or row.get("station_name")
+                or row.get("name")
+                or row.get("city")
+                or row.get("postcode")
+                or layer_name
+            )
+
+            rec = {
+                "lat": float(row["lat"]),
+                "lon": float(row["lon"]),
+                "label": str(label),
+            }
+
+            for col in ("address", "city", "state", "postcode", "phone", "email", "weight"):
+                if col in df.columns and pd.notna(row.get(col)):
+                    rec[col] = row[col]
+            records.append(rec)
+        return records
+
+    # Build bounds from all points
+    bounds_points = []
+    for df in (customers_df, service_df, bp_df, traffic_df):
+        if not df.empty and {"lat", "lon"}.issubset(df.columns):
+            bounds_points.extend(df[["lat", "lon"]].dropna().values.tolist())
+    
+    boundary = None
+    if bounds_points:
+        lats = [p[0] for p in bounds_points]
+        lons = [p[1] for p in bounds_points]
+        bounds = [[min(lats), min(lons)], [max(lats), max(lons)]]
+        boundary = {
+            "type": "rectangle",
+            "feature": rectangle_feature_from_bounds(
+                bounds,
+                properties={"display_name": f"{state or 'All States'}" + (f", {city}" if city else "") + (f", {postcode}" if postcode else "")},
+            ),
+        }
+
+    return {
+        "state": state,
+        "city": city,
+        "postcode": postcode,
+        "boundary": boundary,
+        "customers": df_to_records(customers_df, "customers"),
+        "service": df_to_records(service_df, "service"),
+        "bp": df_to_records(bp_df, "bp"),
+        "traffic": df_to_records(traffic_df, "traffic"),
+    }
 
 
 def _query_to_df(query) -> pd.DataFrame:

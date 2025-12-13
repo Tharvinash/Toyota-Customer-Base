@@ -64,37 +64,33 @@ block content %}
       <div class="card-body">
         <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
           <select
-            id="search-type"
+            id="filter-state"
             class="form-select me-2"
-            style="max-width: 200px"
+            style="min-width: 200px"
           >
-            <option value="state">State</option>
-            <option value="area" selected>Area/Township</option>
-            <option value="postcode">Postcode</option>
+            <option value="">-- All States --</option>
           </select>
-          <input
-            id="search-term"
-            class="form-control me-2"
-            placeholder="Enter state, area, or postcode"
-            style="max-width: 400px"
-          />
-          <div id="radius-container" class="me-2">
-            <input
-              id="search-radius"
-              class="form-control"
-              type="number"
-              value="10"
-              min="1"
-              max="100"
-              style="max-width: 120px"
-              placeholder="Radius (km)"
-            />
-          </div>
-          <button id="search-btn" class="btn btn-primary me-2">Search</button>
-          <button id="clear-btn" class="btn btn-outline-secondary me-2">
+          <select
+            id="filter-city"
+            class="form-select me-2"
+            style="min-width: 200px"
+            disabled
+          >
+            <option value="">-- All Cities --</option>
+          </select>
+          <select
+            id="filter-postcode"
+            class="form-select me-2"
+            style="min-width: 180px"
+            disabled
+          >
+            <option value="">-- All Postcodes --</option>
+          </select>
+          <button id="filter-search-btn" class="btn btn-primary me-2">Search</button>
+          <button id="filter-clear-btn" class="btn btn-outline-secondary me-2">
             Clear
           </button>
-          <span id="search-status" class="text-muted small"></span>
+          <span id="filter-search-status" class="text-muted small"></span>
         </div>
         <div
           class="tips-ui"
@@ -107,11 +103,9 @@ block content %}
             margin-top: 8px;
           "
         >
-          <strong>Tips:</strong>
-          <span id="search-tips"
-            >Enter comma-separated values (e.g.,
-            <code>Selangor, Kuala Lumpur</code> or
-            <code>40400, 47300</code>).</span
+          <strong>Filter:</strong>
+          <span id="filter-tips"
+            >Select a State to filter by location. If City or Postcode is not selected, all data for the selected State/City will be shown.</span
           >
         </div>
       </div>
@@ -229,6 +223,370 @@ block content %}
 ></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script>
+  // Master data for cascading dropdowns
+  let masterData = null;
+  let stateSelect, citySelect, postcodeSelect;
+
+  // Load master data
+  async function loadMasterData() {
+    try {
+      const response = await fetch("/api/master-data");
+      if (!response.ok) throw new Error("Failed to load master data");
+      masterData = await response.json();
+      populateStateDropdown();
+    } catch (error) {
+      console.error("Error loading master data:", error);
+      document.getElementById("filter-search-status").textContent = "Error loading filter data";
+      document.getElementById("filter-search-status").style.color = "#dc3545";
+    }
+  }
+
+  function populateStateDropdown() {
+    if (!masterData || !masterData.states) return;
+    
+    stateSelect = document.getElementById("filter-state");
+    if (!stateSelect) return;
+    
+    stateSelect.innerHTML = '<option value="">-- All States --</option>';
+    
+    masterData.states.forEach((state) => {
+      const option = document.createElement("option");
+      option.value = state.name;
+      option.textContent = state.name;
+      stateSelect.appendChild(option);
+    });
+    
+    stateSelect.disabled = false;
+    stateSelect.addEventListener("change", handleStateChange);
+  }
+
+  function handleStateChange() {
+    if (!stateSelect || !masterData) return;
+    
+    const selectedState = stateSelect.value;
+    citySelect = document.getElementById("filter-city");
+    postcodeSelect = document.getElementById("filter-postcode");
+    
+    if (!citySelect || !postcodeSelect) return;
+    
+    // Reset city and postcode
+    citySelect.innerHTML = '<option value="">-- All Cities --</option>';
+    postcodeSelect.innerHTML = '<option value="">-- All Postcodes --</option>';
+    
+    if (!selectedState) {
+      citySelect.disabled = true;
+      postcodeSelect.disabled = true;
+      return;
+    }
+    
+    // Find the selected state
+    const stateData = masterData.states.find(s => s.name === selectedState);
+    if (!stateData || !stateData.cities) {
+      citySelect.disabled = true;
+      postcodeSelect.disabled = true;
+      return;
+    }
+    
+    // Populate cities
+    citySelect.disabled = false;
+    stateData.cities.forEach((city) => {
+      const option = document.createElement("option");
+      option.value = city.name;
+      option.textContent = city.name;
+      citySelect.appendChild(option);
+    });
+    
+    citySelect.addEventListener("change", handleCityChange);
+    postcodeSelect.disabled = true;
+  }
+
+  function handleCityChange() {
+    if (!stateSelect || !citySelect) return;
+    
+    const selectedState = stateSelect.value;
+    const selectedCity = citySelect.value;
+    postcodeSelect = document.getElementById("filter-postcode");
+    if (!postcodeSelect) return;
+    
+    // Reset postcode
+    postcodeSelect.innerHTML = '<option value="">-- All Postcodes --</option>';
+    
+    if (!selectedState || !selectedCity || !masterData) {
+      postcodeSelect.disabled = true;
+      return;
+    }
+    
+    // Find the selected state and city
+    const stateData = masterData.states.find(s => s.name === selectedState);
+    if (!stateData) {
+      postcodeSelect.disabled = true;
+      return;
+    }
+    
+    const cityData = stateData.cities.find(c => c.name === selectedCity);
+    if (!cityData || !cityData.postcodes || cityData.postcodes.length === 0) {
+      postcodeSelect.disabled = true;
+      return;
+    }
+    
+    // Populate postcodes
+    postcodeSelect.disabled = false;
+    cityData.postcodes.forEach((postcode) => {
+      const option = document.createElement("option");
+      option.value = postcode;
+      option.textContent = postcode;
+      postcodeSelect.appendChild(option);
+    });
+  }
+
+  // Filter search function
+  async function runFilterSearch() {
+    stateSelect = document.getElementById("filter-state");
+    citySelect = document.getElementById("filter-city");
+    postcodeSelect = document.getElementById("filter-postcode");
+    const statusEl = document.getElementById("filter-search-status");
+    
+    if (!stateSelect || !citySelect || !postcodeSelect || !statusEl) {
+      console.error("Filter elements not found");
+      return;
+    }
+    
+    const state = stateSelect.value;
+    const city = citySelect.value;
+    const postcode = postcodeSelect.value;
+    
+    if (!state) {
+      statusEl.textContent = "Please select a State.";
+      statusEl.style.color = "#dc3545";
+      return;
+    }
+    
+    if (!map || !customersLayer || !serviceLayer || !bpLayer || !trafficLayer || !boundaryLayer) {
+      statusEl.textContent = "Map is still loading. Please wait...";
+      statusEl.style.color = "#dc3545";
+      setTimeout(() => runFilterSearch(), 500);
+      return;
+    }
+    
+    statusEl.textContent = "Searching...";
+    statusEl.style.color = "#6c757d";
+    
+    try {
+      const params = new URLSearchParams({ state });
+      if (city) params.append("city", city);
+      if (postcode) params.append("postcode", postcode);
+      
+      const url = `/api/search-filtered?${params.toString()}`;
+      const resp = await fetch(url);
+      
+      if (!resp.ok) {
+        const errorData = await resp.json();
+        statusEl.textContent = errorData.detail || "Error searching data";
+        statusEl.style.color = "#dc3545";
+        return;
+      }
+      
+      const data = await resp.json();
+      
+      // Clear all layers
+      customersLayer.clearLayers();
+      customerCirclesLayer.clearLayers();
+      serviceLayer.clearLayers();
+      bpLayer.clearLayers();
+      trafficLayer.clearLayers();
+      boundaryLayer.clearLayers();
+      heatmapLayer = null;
+      
+      // Render data (reuse existing rendering functions)
+      renderFilteredData(data);
+      
+      const totalResults = (data.customers?.length || 0) + (data.service?.length || 0) + 
+                          (data.bp?.length || 0) + (data.traffic?.length || 0);
+      statusEl.textContent = `Found ${totalResults} result(s)${city ? ` in ${city}` : ""}${postcode ? `, postcode ${postcode}` : ""}`;
+      statusEl.style.color = "#28a745";
+      
+    } catch (err) {
+      console.error("Filter search error:", err);
+      statusEl.textContent = `Error: ${err.message || "Error contacting server"}`;
+      statusEl.style.color = "#dc3545";
+    }
+  }
+
+  function renderFilteredData(data) {
+    // Similar to runSearch but without geocoding - reuse existing rendering logic
+    const bounds = [];
+    
+    // Create heatmap from customer data
+    const customers = data.customers || [];
+    if (customers.length > 0) {
+      const heatmapData = {};
+      customers.forEach((customer) => {
+        const key = `${customer.lat.toFixed(4)},${customer.lon.toFixed(4)}`;
+        if (!heatmapData[key]) {
+          heatmapData[key] = {
+            lat: customer.lat,
+            lon: customer.lon,
+            weight: 0,
+          };
+        }
+        const weightValue = Number(customer.weight);
+        const contribution = Number.isFinite(weightValue) ? weightValue : 1;
+        heatmapData[key].weight += contribution;
+      });
+      
+      const bucketedPoints = Object.values(heatmapData).map((point) => {
+        const rawWeight = point.weight;
+        const bucket = densityBuckets.find((bucket) => {
+          if (bucket.min && rawWeight < bucket.min) return false;
+          if (bucket.max && rawWeight > bucket.max) return false;
+          return true;
+        }) || densityBuckets[densityBuckets.length - 1];
+        
+        let intensity;
+        if (!bucket.min) {
+          intensity = Math.min(rawWeight, bucket.max) / bucket.max;
+        } else if (!bucket.max) {
+          intensity = 1 + (rawWeight - bucket.min) / bucket.min;
+        } else {
+          intensity = (rawWeight - bucket.min) / (bucket.max - bucket.min);
+        }
+        intensity = Math.min(Math.max(intensity, 0.1), 1.0);
+        
+        return {
+          lat: point.lat,
+          lon: point.lon,
+          intensity,
+          color: bucket.color,
+          label: bucket.label,
+          raw: rawWeight,
+        };
+      });
+      
+      heatmapLayer = L.heatLayer(
+        bucketedPoints.map((pt) => [pt.lat, pt.lon, pt.intensity]),
+        {
+          radius: 25,
+          blur: 15,
+          maxZoom: 17,
+          gradient: densityBuckets.reduce((grad, bucket, idx) => {
+            grad[idx / (densityBuckets.length - 1 || 1)] = bucket.color;
+            return grad;
+          }, {}),
+        }
+      );
+      customersLayer.addLayer(heatmapLayer);
+      
+      bucketedPoints.forEach((pt) => {
+        const radius = pt.raw < 1000 ? 8 : pt.raw < 2000 ? 12 : 
+                      pt.raw < 3000 ? 16 : pt.raw < 4000 ? 20 : 
+                      pt.raw < 5000 ? 24 : 28;
+        
+        const circle = L.circleMarker([pt.lat, pt.lon], {
+          radius,
+          color: pt.color,
+          fillColor: pt.color,
+          fillOpacity: 0.7,
+          weight: 2,
+          opacity: 0.9,
+        }).bindPopup(`<strong>${pt.label}</strong><br>Customers: ${pt.raw.toLocaleString()}`);
+        circle.addTo(customerCirclesLayer);
+        bounds.push([pt.lat, pt.lon]);
+      });
+    }
+    
+    // Add markers
+    function addMarkers(items, layer, style) {
+      if (!Array.isArray(items)) return;
+      items.forEach((item) => {
+        if (!item || typeof item.lat !== "number" || typeof item.lon !== "number") {
+          return;
+        }
+        const latlng = [item.lat, item.lon];
+        bounds.push(latlng);
+        const marker = L.circleMarker(latlng, style || {});
+        const props = { ...item };
+        delete props.lat;
+        delete props.lon;
+        
+        let popup = `<strong>${item.label || "Location"}</strong>`;
+        const lines = [];
+        for (const [k, v] of Object.entries(props)) {
+          if (k === "label") continue;
+          if (v !== null && v !== undefined && v !== "") {
+            lines.push(`<b>${k}</b>: ${v}`);
+          }
+        }
+        if (lines.length) {
+          popup += "<br>" + lines.join("<br>");
+        }
+        marker.bindPopup(popup);
+        marker.addTo(layer);
+      });
+    }
+    
+    addMarkers(data.service || [], serviceLayer, serviceStyle);
+    addMarkers(data.bp || [], bpLayer, bpStyle);
+    addMarkers(data.traffic || [], trafficLayer, trafficStyle);
+    
+    // Draw boundary if available
+    if (data.boundary && data.boundary.feature) {
+      const geoLayer = L.geoJSON(data.boundary.feature, {
+        interactive: false,
+        style: {
+          color: "#1890ff",
+          weight: 2,
+          fillColor: "#1890ff",
+          fillOpacity: 0.08,
+        },
+      }).addTo(boundaryLayer);
+      const boundaryBounds = geoLayer.getBounds();
+      bounds.push([boundaryBounds.getSouth(), boundaryBounds.getWest()]);
+      bounds.push([boundaryBounds.getNorth(), boundaryBounds.getEast()]);
+    }
+    
+    // Fit map to bounds
+    if (bounds.length > 0) {
+      try {
+        const mapBounds = L.latLngBounds(bounds);
+        map.fitBounds(mapBounds, { padding: [20, 20] });
+        setTimeout(() => map.invalidateSize(), 100);
+      } catch (e) {
+        console.warn("Error fitting bounds:", e);
+      }
+    }
+  }
+
+  // Clear filter
+  function clearFilter() {
+    stateSelect = document.getElementById("filter-state");
+    citySelect = document.getElementById("filter-city");
+    postcodeSelect = document.getElementById("filter-postcode");
+    const statusEl = document.getElementById("filter-search-status");
+    
+    if (!stateSelect || !citySelect || !postcodeSelect || !statusEl) return;
+    
+    stateSelect.value = "";
+    citySelect.innerHTML = '<option value="">-- All Cities --</option>';
+    citySelect.disabled = true;
+    postcodeSelect.innerHTML = '<option value="">-- All Postcodes --</option>';
+    postcodeSelect.disabled = true;
+    statusEl.textContent = "";
+    
+    // Clear map
+    if (heatmapLayer) {
+      map.removeLayer(heatmapLayer);
+      heatmapLayer = null;
+    }
+    customersLayer.clearLayers();
+    serviceLayer.clearLayers();
+    bpLayer.clearLayers();
+    trafficLayer.clearLayers();
+    boundaryLayer.clearLayers();
+    
+    map.setView([4.5, 109.0], 6);
+    setTimeout(() => map.invalidateSize(), 100);
+  }
+
   // Declare map variable globally
   let map;
   let heatmapLayer;
@@ -358,6 +716,12 @@ block content %}
   // Wait for DOM to be fully loaded before initializing map
   document.addEventListener("DOMContentLoaded", function () {
     renderDensityLegend();
+    // Load master data for cascading dropdowns
+    loadMasterData();
+    
+    // Setup filter search button
+    document.getElementById("filter-search-btn").addEventListener("click", runFilterSearch);
+    document.getElementById("filter-clear-btn").addEventListener("click", clearFilter);
     // Ensure map container is visible
     const mapContainer = document.getElementById("map-container");
     const mapDiv = document.getElementById("map");
@@ -439,31 +803,7 @@ block content %}
       })
       .addTo(map);
 
-    // Show/hide radius input based on search type
-    const searchTypeSelect = document.getElementById("search-type");
-    const radiusContainer = document.getElementById("radius-container");
-    const searchTips = document.getElementById("search-tips");
-
-    function updateSearchUI() {
-      const searchType = searchTypeSelect.value;
-      if (searchType === "state") {
-        radiusContainer.style.display = "none";
-        searchTips.innerHTML =
-          "Enter Malaysian states (comma-separated), e.g., <code>Selangor, Kuala Lumpur</code>.";
-      } else {
-        radiusContainer.style.display = "block";
-        if (searchType === "area") {
-          searchTips.innerHTML =
-            "Enter towns/townships (comma-separated), e.g., <code>Shah Alam, Subang Jaya</code>.";
-        } else {
-          searchTips.innerHTML =
-            "Enter 4-5 digit postcodes (comma-separated), e.g., <code>40400, 47300</code>.";
-        }
-      }
-    }
-
-    searchTypeSelect.addEventListener("change", updateSearchUI);
-    updateSearchUI(); // Initialize on page load
+    // Old search UI removed - using cascading dropdowns instead
   });
 
   function renderBoundary(boundaryPayload, color) {
@@ -886,44 +1226,7 @@ block content %}
     }
   }
 
-  document
-    .getElementById("search-btn")
-    .addEventListener("click", () => runSearch());
-
-  document.getElementById("clear-btn").addEventListener("click", () => {
-    const termInput = document.getElementById("search-term");
-    const radiusInput = document.getElementById("search-radius");
-    const statusEl = document.getElementById("search-status");
-
-    termInput.value = "";
-    radiusInput.value = "10";
-    statusEl.textContent = "";
-    statusEl.style.color = ""; // Reset color
-
-    // Remove heatmap if it exists
-    if (heatmapLayer) {
-      map.removeLayer(heatmapLayer);
-      heatmapLayer = null;
-    }
-
-    customersLayer.clearLayers();
-    serviceLayer.clearLayers();
-    bpLayer.clearLayers();
-    trafficLayer.clearLayers();
-    boundaryLayer.clearLayers();
-
-    map.setView([4.5, 109.0], 6);
-    // Force resize on mobile
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 100);
-  });
-
-  document.getElementById("search-term").addEventListener("keyup", (e) => {
-    if (e.key === "Enter") {
-      runSearch();
-    }
-  });
+  // Old search event listeners removed - using cascading dropdown filters instead
 
   // Handle window resize and orientation change for mobile
   window.addEventListener("resize", () => {
