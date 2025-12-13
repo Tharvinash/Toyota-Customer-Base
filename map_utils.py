@@ -8,7 +8,8 @@ import requests
 import time
 
 # ---------- SETTINGS ----------
-DATA_DIR = Path(__file__).parent
+DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 STATE = "Selangor"
 OUTPUT_HTML = DATA_DIR / "selangor_map.html"
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
+from pathlib import Path
 
 from sqlalchemy import (
     Column,
@@ -14,7 +14,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./selangor_map.db")
+BASE_DIR = Path(__file__).parent
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+DEFAULT_SQLITE_PATH = (DATA_DIR / "selangor_map.db").resolve()
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_SQLITE_PATH.as_posix()}")
 
 engine = create_engine(
     DATABASE_URL,

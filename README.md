@@ -35,10 +35,12 @@ uvicorn main:app --reload
 - Static Folium map: `http://127.0.0.1:8000/map`
 - Interactive search map: `http://127.0.0.1:8000/interactive-map`
 
+All CSV inputs, the generated `selangor_map.html`, and the default SQLite DB live under the `data/` folder (created automatically).
+
 ### Environment variables
 
 - `DATABASE_URL`: SQLAlchemy URL for the database.
-  - For local development, the default is `sqlite:///./selangor_map.db`.
+  - For local development, the default is `sqlite:///./data/selangor_map.db`.
   - For production, use a managed PostgreSQL URL, e.g.:
     - `postgresql://user:password@host:5432/selangor_map`
 
