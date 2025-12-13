@@ -1,6 +1,6 @@
 ## Selangor Map Backend
 
-This project generates an interactive Folium map for Selangor, showing:
+This project serves an interactive Google Maps experience for Selangor, showing:
 
 - Toyota service outlets
 - Toyota body & paint outlets
@@ -22,17 +22,26 @@ pip install -r requirements.txt
 python migrate_from_csv.py
 ```
 
-4. Start the FastAPI app:
+4. Provide your Google Maps API key (Maps JavaScript + Geocoding enabled):
+
+- Set an environment variable before starting the app:
+
+```bash
+$env:GOOGLE_MAPS_API_KEY="YOUR_KEY_HERE"   # PowerShell
+# or
+export GOOGLE_MAPS_API_KEY="YOUR_KEY_HERE" # bash/zsh
+```
+
+5. Start the FastAPI app:
 
 ```bash
 .\.venv\Scripts\activate
 uvicorn main:app --reload
 ```
 
-5. Open the admin dashboard:
+6. Open the admin dashboard:
 
 - Admin UI: `http://127.0.0.1:8000/`
-- Static Folium map: `http://127.0.0.1:8000/map`
 - Interactive search map: `http://127.0.0.1:8000/interactive-map`
 
 All CSV inputs, the generated `selangor_map.html`, and the default SQLite DB live under the `data/` folder (created automatically).
@@ -43,6 +52,7 @@ All CSV inputs, the generated `selangor_map.html`, and the default SQLite DB liv
   - For local development, the default is `sqlite:///./data/selangor_map.db`.
   - For production, use a managed PostgreSQL URL, e.g.:
     - `postgresql://user:password@host:5432/selangor_map`
+- `GOOGLE_MAPS_API_KEY`: Required for Google Maps JavaScript + Geocoding. Enable both APIs for the key and restrict it to your domains/origins where possible.
 
 ### Deployment notes
 

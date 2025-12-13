@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 import pandas as pd
 import numpy as np
 import folium
@@ -8,10 +10,13 @@ import requests
 import time
 
 # ---------- SETTINGS ----------
+load_dotenv()
+
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 STATE = "Selangor"
 OUTPUT_HTML = DATA_DIR / "selangor_map.html"
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 
 # Approximate bounding box for Malaysia (Peninsular + East Malaysia)
 # [south_lat, west_lon], [north_lat, east_lon]
@@ -204,10 +209,8 @@ def filter_by_radius(
 
 def geocode_location(term: str) -> Optional[Tuple[float, float]]:
     """
-    Use OpenStreetMap Nominatim to geocode a location name or postcode.
+    Use Google Maps Geocoding API to geocode a location name or postcode.
     Returns (lat, lon) if found, None otherwise.
-    
-    This gets coordinates directly from the internet, not from your database.
     """
     result = geocode_location_with_details(term)
     if result:
@@ -217,57 +220,59 @@ def geocode_location(term: str) -> Optional[Tuple[float, float]]:
 
 def geocode_location_with_details(term: str) -> Optional[dict]:
     """
-    Use OpenStreetMap Nominatim to geocode a location name or postcode.
+    Use Google Maps Geocoding API to geocode a location name or postcode.
     Returns dict with 'lat', 'lon', 'boundingbox', and 'display_name' if found, None otherwise.
-    
-    This gets coordinates and boundary information directly from the internet.
     """
     term = (term or "").strip()
     if not term:
         return None
 
-    # OpenStreetMap Nominatim (free, no API key needed)
-    url = "https://nominatim.openstreetmap.org/search"
+    if not GOOGLE_MAPS_API_KEY:
+        log("[ERROR] Missing GOOGLE_MAPS_API_KEY environment variable")
+        return None
+
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {
-        "q": term,
-        "format": "json",
-        "limit": 1,
-        "countrycodes": "my",  # Restrict to Malaysia (optional, remove if you want worldwide)
-        "addressdetails": 1,
-        "polygon_geojson": 1,  # Request polygon geometry when available
-    }
-    headers = {
-        "User-Agent": "SelangorMapApp/1.0"  # Required by Nominatim usage policy
+        "address": term,
+        "components": "country:MY",
+        "key": GOOGLE_MAPS_API_KEY,
     }
 
     try:
-        resp = requests.get(url, params=params, headers=headers, timeout=10)
+        resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
-        data = resp.json()
-        
-        if not data or len(data) == 0:
+        payload = resp.json()
+
+        if payload.get("status") != "OK" or not payload.get("results"):
+            log(f"[WARN] Geocoding returned status={payload.get('status')} for '{term}'")
             return None
-            
-        # Get the first result
-        result = data[0]
-        lat = float(result["lat"])
-        lon = float(result["lon"])
-        boundingbox = result.get("boundingbox", [])
-        display_name = result.get("display_name", term)
-        polygon_geojson = result.get("geojson")
-        
+
+        result = payload["results"][0]
+        geometry = result.get("geometry", {})
+        location = geometry.get("location", {})
+        viewport = geometry.get("viewport") or {}
+        bounds_box = geometry.get("bounds") or viewport
+
+        lat = float(location.get("lat"))
+        lon = float(location.get("lng"))
+        display_name = result.get("formatted_address", term)
+
+        boundingbox = None
+        if bounds_box:
+            sw = bounds_box.get("southwest") or {}
+            ne = bounds_box.get("northeast") or {}
+            if "lat" in sw and "lng" in sw and "lat" in ne and "lng" in ne:
+                boundingbox = [sw["lat"], ne["lat"], sw["lng"], ne["lng"]]
+
         log(f"Geocoded '{term}' -> ({lat}, {lon})")
         return {
             "lat": lat,
             "lon": lon,
             "boundingbox": boundingbox,
             "display_name": display_name,
-            "polygon_geojson": polygon_geojson,
-            "polygon_feature": geojson_feature_from_polygon(
-                polygon_geojson,
-                properties={"display_name": display_name},
-            ),
-            "raw_result": result
+            "polygon_geojson": None,
+            "polygon_feature": None,
+            "raw_result": result,
         }
     except Exception as e:
         log(f"[ERROR] Geocoding failed for '{term}': {e}")
@@ -321,41 +326,6 @@ def geojson_feature_from_polygon(
         "geometry": {
             "type": geometry_type,
             "coordinates": coordinates,
-        },
-    }
-
-
-def rectangle_feature_from_bounds(
-    bounds: Optional[List[List[float]]],
-    properties: Optional[Dict[str, Any]] = None,
-) -> Optional[Dict[str, Any]]:
-    """
-    Build a GeoJSON rectangle polygon Feature from [[south, west], [north, east]] bounds.
-    """
-    if not bounds or len(bounds) != 2:
-        return None
-    (south, west), (north, east) = bounds
-    try:
-        south = float(south)
-        west = float(west)
-        north = float(north)
-        east = float(east)
-    except (TypeError, ValueError):
-        return None
-
-    ring = [
-        [west, south],
-        [east, south],
-        [east, north],
-        [west, north],
-        [west, south],
-    ]
-    return {
-        "type": "Feature",
-        "properties": properties or {},
-        "geometry": {
-            "type": "Polygon",
-            "coordinates": [ring],
         },
     }
 

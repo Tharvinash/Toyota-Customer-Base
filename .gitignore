@@ -21,3 +21,4 @@ Thumbs.db
 
 # Jupyter (if you ever use it here)
 .ipynb_checkpoints/
+.env

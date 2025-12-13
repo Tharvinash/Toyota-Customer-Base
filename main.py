@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
+import os
 import json
 
 import pandas as pd
@@ -27,7 +28,6 @@ from map_utils import (
     filter_by_radius,
     extract_bounding_box,
     extract_polygon_feature,
-    rectangle_feature_from_bounds,
 )
 
 
@@ -38,6 +38,8 @@ init_db()
 
 # Use a path relative to this file so it works regardless of the working directory
 BASE_DIR = Path(__file__).parent
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+GOOGLE_MAPS_MAP_ID = os.getenv("GOOGLE_MAPS_MAP_ID", "")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 static_dir = BASE_DIR / "static"
 if static_dir.exists():
@@ -134,24 +136,11 @@ def search_filtered(
         if not df.empty and {"lat", "lon"}.issubset(df.columns):
             bounds_points.extend(df[["lat", "lon"]].dropna().values.tolist())
     
-    boundary = None
-    if bounds_points:
-        lats = [p[0] for p in bounds_points]
-        lons = [p[1] for p in bounds_points]
-        bounds = [[min(lats), min(lons)], [max(lats), max(lons)]]
-        boundary = {
-            "type": "rectangle",
-            "feature": rectangle_feature_from_bounds(
-                bounds,
-                properties={"display_name": f"{state or 'All States'}" + (f", {city}" if city else "") + (f", {postcode}" if postcode else "")},
-            ),
-        }
-
     return {
         "state": state,
         "city": city,
         "postcode": postcode,
-        "boundary": boundary,
+        "boundary": None,
         "customers": df_to_records(customers_df, "customers"),
         "service": df_to_records(service_df, "service"),
         "bp": df_to_records(bp_df, "bp"),
@@ -322,20 +311,6 @@ def _build_boundary_payload(
 ) -> Optional[Dict[str, Any]]:
     if polygon_feature:
         return {"type": "polygon", "feature": polygon_feature}
-    if admin_bounds:
-        rect_feature = rectangle_feature_from_bounds(
-            admin_bounds,
-            properties={"display_name": display_name, "source": "nominatim-boundingbox"},
-        )
-        if rect_feature:
-            return {"type": "rectangle", "feature": rect_feature}
-    if fallback_bounds:
-        rect_feature = rectangle_feature_from_bounds(
-            fallback_bounds,
-            properties={"display_name": display_name, "source": "data-extent"},
-        )
-        if rect_feature:
-            return {"type": "rectangle", "feature": rect_feature}
     if search_type != "state" and radius_km:
         return {
             "type": "circle",
@@ -353,9 +328,16 @@ def admin_home(request: Request) -> HTMLResponse:
 @app.get("/interactive-map", response_class=HTMLResponse)
 def interactive_map(request: Request) -> HTMLResponse:
     """
-    Render the interactive Leaflet-based map with search UI.
+    Render the interactive Google Maps-based map with search UI.
     """
-    return templates.TemplateResponse("interactive_map.html", {"request": request})
+    return templates.TemplateResponse(
+        "interactive_map.html",
+        {
+            "request": request,
+            "google_maps_api_key": GOOGLE_MAPS_API_KEY,
+            "google_maps_map_id": GOOGLE_MAPS_MAP_ID,
+        },
+    )
 
 
 @app.get("/api/search")
