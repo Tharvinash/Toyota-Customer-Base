@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 
 import pandas as pd
+import requests
+import math
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -510,6 +512,82 @@ def search_multiple_locations(
         "bp": df_to_records(bp_df, "bp"),
         "traffic": df_to_records(traffic_df, "traffic"),
     }
+
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate the great circle distance between two points on Earth (in km).
+    Uses the Haversine formula.
+    """
+    R = 6371.0  # Earth radius in km
+    
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+    
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    
+    a = math.sin(dlat / 2.0) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2.0) ** 2
+    c = 2 * math.asin(math.sqrt(a))
+    
+    return R * c
+
+
+@app.get("/api/route")
+def get_route(
+    lat1: float = Query(..., description="Latitude of first location"),
+    lon1: float = Query(..., description="Longitude of first location"),
+    lat2: float = Query(..., description="Latitude of second location"),
+    lon2: float = Query(..., description="Longitude of second location"),
+    route_type: str = Query("straight", description="Route type: 'straight' for straight-line, 'road' for driving route"),
+):
+    """
+    Calculate distance and route between two locations.
+    Returns straight-line distance and optionally a road route from OSRM.
+    """
+    # Calculate straight-line distance
+    straight_distance_km = haversine_distance(lat1, lon1, lat2, lon2)
+    
+    result = {
+        "from": {"lat": lat1, "lon": lon1},
+        "to": {"lat": lat2, "lon": lon2},
+        "straight_distance_km": round(straight_distance_km, 2),
+        "route_type": route_type,
+    }
+    
+    # If requesting road route, try to get it from OSRM
+    if route_type == "road":
+        try:
+            # OSRM routing service (free, no API key needed)
+            # Format: /route/v1/driving/{lon1},{lat1};{lon2},{lat2}
+            osrm_url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}"
+            params = {
+                "overview": "full",
+                "geometries": "geojson",
+                "steps": "false",
+            }
+            
+            resp = requests.get(osrm_url, params=params, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("code") == "Ok" and len(data.get("routes", [])) > 0:
+                    route = data["routes"][0]
+                    road_distance_km = route["distance"] / 1000.0  # Convert meters to km
+                    road_duration_min = route["duration"] / 60.0  # Convert seconds to minutes
+                    geometry = route.get("geometry", {})
+                    
+                    result["road_distance_km"] = round(road_distance_km, 2)
+                    result["road_duration_min"] = round(road_duration_min, 2)
+                    result["route_geometry"] = geometry
+                    result["route_coordinates"] = geometry.get("coordinates", [])
+        except Exception as e:
+            # If OSRM fails, just return straight-line distance
+            result["error"] = f"Could not fetch road route: {str(e)}"
+            result["route_type"] = "straight"
+    
+    return result
 
 
 @app.get("/admin/service-outlets", response_class=HTMLResponse)

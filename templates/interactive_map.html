@@ -176,6 +176,124 @@ block content %}
             values for multiple locations.</span
           >
         </div>
+
+        <!-- Route/Distance Selection UI -->
+        <div
+          class="route-ui"
+          style="
+            font-size: 14px;
+            padding: 12px;
+            background-color: #e8f4f8;
+            border-radius: 4px;
+            margin-top: 12px;
+            border: 1px solid #bee5eb;
+          "
+        >
+          <div style="font-weight: 600; margin-bottom: 8px; color: #0c5460">
+            <i class="fa fa-route"></i> Get Distance Between Locations
+          </div>
+          <div class="mb-2">
+            <label
+              class="form-label small mb-1"
+              style="font-size: 14px; color: #0c5460"
+            >
+              From Location
+            </label>
+            <div
+              id="route-from"
+              style="
+                padding: 8px;
+                background: white;
+                border: 1px solid #bee5eb;
+                border-radius: 4px;
+                min-height: 36px;
+                font-size: 14px;
+                color: #6c757d;
+              "
+            >
+              Click on a marker on the map
+            </div>
+          </div>
+          <div class="mb-2">
+            <label
+              class="form-label small mb-1"
+              style="font-size: 14px; color: #0c5460"
+            >
+              To Location
+            </label>
+            <div
+              id="route-to"
+              style="
+                padding: 8px;
+                background: white;
+                border: 1px solid #bee5eb;
+                border-radius: 4px;
+                min-height: 36px;
+                font-size: 14px;
+                color: #6c757d;
+              "
+            >
+              Click on a marker on the map
+            </div>
+          </div>
+          <div class="mb-2">
+            <button
+              id="show-route-btn"
+              class="btn btn-info btn-sm w-100"
+              disabled
+            >
+              <i class="fa fa-route"></i> Show Route & Distance
+            </button>
+          </div>
+          <div class="mb-2">
+            <button
+              id="clear-route-btn"
+              class="btn btn-outline-secondary btn-sm w-100"
+              style="display: none"
+            >
+              Clear Route
+            </button>
+          </div>
+          <!-- Route Details Display -->
+          <div
+            id="route-details-display"
+            style="
+              display: none;
+              margin-top: 12px;
+              padding: 16px;
+              background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
+              border: 2px solid #17a2b8;
+              border-radius: 8px;
+              box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            "
+          >
+            <div
+              style="
+                font-weight: 600;
+                margin-bottom: 8px;
+                color: #0c5460;
+                font-size: 14px;
+              "
+            >
+              <i class="fa fa-route"></i> Route Details
+            </div>
+            <div
+              id="route-details-content"
+              style="font-size: 14px; line-height: 1.8"
+            ></div>
+          </div>
+          <div
+            id="route-info"
+            style="
+              display: none;
+              margin-top: 8px;
+              padding: 8px;
+              background: white;
+              border-radius: 4px;
+              font-size: 12px;
+            "
+          ></div>
+        </div>
       </div>
     </div>
   </div>
@@ -301,10 +419,17 @@ block content %}
     bpLayer,
     trafficLayer,
     boundaryLayer,
-    darkOverlayLayer;
+    darkOverlayLayer,
+    routeLayer;
   let layerControl;
   let currentBoundaries = null; // Store current boundaries for overlay updates
   let overlayUpdateTimeout = null; // Debounce overlay updates
+
+  // Route selection variables
+  let selectedFrom = null;
+  let selectedTo = null;
+  let routePolyline = null;
+  let routeMarkers = [];
 
   // Define marker styles globally so they're accessible everywhere
   const customerStyle = {
@@ -486,6 +611,7 @@ block content %}
     bpLayer = L.layerGroup().addTo(map);
     trafficLayer = L.layerGroup().addTo(map);
     boundaryLayer = L.layerGroup().addTo(map);
+    routeLayer = L.layerGroup().addTo(map);
     darkOverlayLayer = L.layerGroup().addTo(map);
 
     // Create layer control with all layers
@@ -497,6 +623,7 @@ block content %}
       "Toyota Body & Paint": bpLayer,
       "Traffic Police Stations": trafficLayer,
       "Search Boundary": boundaryLayer,
+      Route: routeLayer,
     };
 
     layerControl = L.control
@@ -1149,7 +1276,14 @@ block content %}
           }).bindPopup(
             `<strong>${
               pt.label
-            }</strong><br>Customers: ${pt.raw.toLocaleString()}`
+            }</strong><br>Customers: ${pt.raw.toLocaleString()}<br><br><button class="btn btn-sm btn-info" onclick="selectLocationForRoute(${
+              pt.lat
+            }, ${pt.lon}, '${pt.label.replace(
+              /'/g,
+              "\\'"
+            )}')" style="font-size: 11px; padding: 2px 6px;">
+              <i class="fa fa-route"></i> Select for Route
+            </button>`
           );
           circle.addTo(customerCirclesLayer);
           bounds.push([pt.lat, pt.lon]);
@@ -1195,6 +1329,14 @@ block content %}
           if (lines.length) {
             popup += "<br>" + lines.join("<br>");
           }
+          popup += `<br><br><button class="btn btn-sm btn-info" onclick="selectLocationForRoute(${
+            item.lat
+          }, ${item.lon}, '${(item.label || "Location").replace(
+            /'/g,
+            "\\'"
+          )}')" style="font-size: 11px; padding: 2px 6px;">
+            <i class="fa fa-route"></i> Select for Route
+          </button>`;
           marker.bindPopup(popup);
           marker.addTo(layer);
         });
@@ -1361,6 +1503,8 @@ block content %}
     trafficLayer.clearLayers();
     boundaryLayer.clearLayers();
     darkOverlayLayer.clearLayers();
+    routeLayer.clearLayers();
+    clearRouteSelection();
 
     // Clear stored boundaries
     currentBoundaries = null;
@@ -1405,6 +1549,355 @@ block content %}
     setTimeout(() => {
       map.invalidateSize();
     }, 200);
+  });
+
+  // Route selection and display functions
+  function selectLocationForRoute(lat, lon, label) {
+    const fromEl = document.getElementById("route-from");
+    const toEl = document.getElementById("route-to");
+    const showRouteBtn = document.getElementById("show-route-btn");
+
+    // If neither is selected, select "From"
+    if (!selectedFrom && !selectedTo) {
+      selectedFrom = { lat, lon, label };
+      fromEl.innerHTML = `<strong>${label}</strong><br><small>Lat: ${lat.toFixed(
+        4
+      )}, Lon: ${lon.toFixed(4)}</small>`;
+      fromEl.style.color = "#0c5460";
+      fromEl.style.borderColor = "#17a2b8";
+    }
+    // If "From" is selected but "To" is not, select "To"
+    else if (selectedFrom && !selectedTo) {
+      selectedTo = { lat, lon, label };
+      toEl.innerHTML = `<strong>${label}</strong><br><small>Lat: ${lat.toFixed(
+        4
+      )}, Lon: ${lon.toFixed(4)}</small>`;
+      toEl.style.color = "#0c5460";
+      toEl.style.borderColor = "#17a2b8";
+      showRouteBtn.disabled = false;
+    }
+    // If both are selected, replace "From" and clear "To"
+    else {
+      selectedFrom = { lat, lon, label };
+      selectedTo = null;
+      fromEl.innerHTML = `<strong>${label}</strong><br><small>Lat: ${lat.toFixed(
+        4
+      )}, Lon: ${lon.toFixed(4)}</small>`;
+      fromEl.style.color = "#0c5460";
+      fromEl.style.borderColor = "#17a2b8";
+      toEl.innerHTML = "Click on a marker on the map";
+      toEl.style.color = "#6c757d";
+      toEl.style.borderColor = "#bee5eb";
+      showRouteBtn.disabled = true;
+      clearRoute();
+    }
+  }
+
+  async function showRoute() {
+    if (!selectedFrom || !selectedTo) {
+      alert("Please select both 'From' and 'To' locations");
+      return;
+    }
+
+    const routeInfoEl = document.getElementById("route-info");
+    const clearRouteBtn = document.getElementById("clear-route-btn");
+
+    routeInfoEl.style.display = "block";
+    routeInfoEl.innerHTML =
+      "<i class='fa fa-spinner fa-spin'></i> Calculating route...";
+    routeInfoEl.style.color = "#6c757d";
+
+    try {
+      // First try to get road route
+      const params = new URLSearchParams({
+        lat1: selectedFrom.lat.toString(),
+        lon1: selectedFrom.lon.toString(),
+        lat2: selectedTo.lat.toString(),
+        lon2: selectedTo.lon.toString(),
+        route_type: "road",
+      });
+      const url = `/api/route?${params.toString()}`;
+      const resp = await fetch(url);
+
+      if (resp.ok) {
+        const data = await resp.json();
+
+        // Clear existing route
+        clearRoute();
+
+        // Prepare route info for popup
+        let routePopupHtml = `<div style="text-align: center; min-width: 200px;"><strong><i class="fa fa-route"></i> Route Details</strong><br><hr style="margin: 5px 0;">`;
+        if (data.road_distance_km) {
+          routePopupHtml += `<div style="font-size: 16px; font-weight: bold; color: #0c5460; margin: 5px 0;">
+            <i class="fa fa-road"></i> ${data.road_distance_km} km
+          </div>`;
+          if (data.road_duration_min) {
+            const hours = Math.floor(data.road_duration_min / 60);
+            const minutes = Math.round(data.road_duration_min % 60);
+            const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+            routePopupHtml += `<div style="font-size: 14px; color: #17a2b8; margin: 5px 0;">
+              <i class="fa fa-clock-o"></i> ${timeStr}
+            </div>`;
+          }
+          routePopupHtml += `<small style="color: #6c757d;">Straight-line: ${data.straight_distance_km} km</small>`;
+        } else {
+          routePopupHtml += `<div style="font-size: 16px; font-weight: bold; color: #0c5460; margin: 5px 0;">
+            <i class="fa fa-arrows-h"></i> ${data.straight_distance_km} km
+          </div>`;
+          routePopupHtml += `<small style="color: #6c757d;">Straight-line distance</small>`;
+        }
+        routePopupHtml += `</div>`;
+
+        // Draw route polyline
+        if (data.route_coordinates && data.route_coordinates.length > 0) {
+          // Convert GeoJSON coordinates [lon, lat] to Leaflet [lat, lon]
+          const routePoints = data.route_coordinates.map((coord) => [
+            coord[1],
+            coord[0],
+          ]);
+          routePolyline = L.polyline(routePoints, {
+            color: "#ff6b35",
+            weight: 5,
+            opacity: 0.9,
+            dashArray: "10, 5",
+          })
+            .bindPopup(routePopupHtml)
+            .addTo(routeLayer);
+
+          // Fit map to show the route
+          map.fitBounds(routePolyline.getBounds(), { padding: [50, 50] });
+        } else {
+          // Fallback to straight line if no road route
+          routePolyline = L.polyline(
+            [
+              [selectedFrom.lat, selectedFrom.lon],
+              [selectedTo.lat, selectedTo.lon],
+            ],
+            {
+              color: "#ff6b35",
+              weight: 5,
+              opacity: 0.9,
+              dashArray: "10, 5",
+            }
+          )
+            .bindPopup(routePopupHtml)
+            .addTo(routeLayer);
+          map.fitBounds(routePolyline.getBounds(), { padding: [50, 50] });
+        }
+
+        // Prepare marker popups with distance/time info
+        let startPopupHtml = `<div style="text-align: center;"><strong style="color: #28a745;">📍 Start</strong><br>${selectedFrom.label}`;
+        let endPopupHtml = `<div style="text-align: center;"><strong style="color: #dc3545;">📍 End</strong><br>${selectedTo.label}`;
+
+        if (data.road_distance_km) {
+          startPopupHtml += `<br><br><small><i class="fa fa-road"></i> ${data.road_distance_km} km`;
+          if (data.road_duration_min) {
+            const hours = Math.floor(data.road_duration_min / 60);
+            const minutes = Math.round(data.road_duration_min % 60);
+            const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+            startPopupHtml += ` | <i class="fa fa-clock-o"></i> ${timeStr}`;
+          }
+          startPopupHtml += `</small>`;
+
+          endPopupHtml += `<br><br><small><i class="fa fa-road"></i> ${data.road_distance_km} km`;
+          if (data.road_duration_min) {
+            const hours = Math.floor(data.road_duration_min / 60);
+            const minutes = Math.round(data.road_duration_min % 60);
+            const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+            endPopupHtml += ` | <i class="fa fa-clock-o"></i> ${timeStr}`;
+          }
+          endPopupHtml += `</small>`;
+        } else {
+          startPopupHtml += `<br><br><small><i class="fa fa-arrows-h"></i> ${data.straight_distance_km} km</small>`;
+          endPopupHtml += `<br><br><small><i class="fa fa-arrows-h"></i> ${data.straight_distance_km} km</small>`;
+        }
+        startPopupHtml += `</div>`;
+        endPopupHtml += `</div>`;
+
+        // Add markers for start and end points
+        const startMarker = L.marker([selectedFrom.lat, selectedFrom.lon], {
+          icon: L.divIcon({
+            className: "route-marker",
+            html: '<div style="background-color: #28a745; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">S</div>',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+          }),
+        })
+          .bindPopup(startPopupHtml)
+          .addTo(routeLayer);
+
+        const endMarker = L.marker([selectedTo.lat, selectedTo.lon], {
+          icon: L.divIcon({
+            className: "route-marker",
+            html: '<div style="background-color: #dc3545; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">E</div>',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+          }),
+        })
+          .bindPopup(endPopupHtml)
+          .addTo(routeLayer);
+
+        routeMarkers = [startMarker, endMarker];
+
+        // Display route details in the simple format below "Get Distance Between Locations"
+        const routeDetailsDisplay = document.getElementById(
+          "route-details-display"
+        );
+        const routeDetailsContent = document.getElementById(
+          "route-details-content"
+        );
+
+        if (data.road_distance_km) {
+          const hours = Math.floor(data.road_duration_min / 60);
+          const minutes = Math.round(data.road_duration_min % 60);
+          const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+          routeDetailsContent.innerHTML = `
+            <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #dee2e6;">
+              <div style="font-size: 11px; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                Distance
+              </div>
+              <div style="font-size: 20px; font-weight: 700; color: #0c5460; line-height: 1.2;">
+                ${data.road_distance_km} km
+              </div>
+            </div>
+            <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #dee2e6;">
+              <div style="font-size: 11px; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                ETA
+              </div>
+              <div style="font-size: 18px; font-weight: 600; color: #17a2b8; line-height: 1.2;">
+                ${timeStr}
+              </div>
+            </div>
+            <div>
+              <div style="font-size: 11px; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                Displacement
+              </div>
+              <div style="font-size: 14px; font-weight: 500; color: #495057; line-height: 1.2;">
+                ${data.straight_distance_km} km
+              </div>
+            </div>
+          `;
+        } else {
+          routeDetailsContent.innerHTML = `
+            <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #dee2e6;">
+              <div style="font-size: 11px; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                Distance
+              </div>
+              <div style="font-size: 20px; font-weight: 700; color: #0c5460; line-height: 1.2;">
+                ${data.straight_distance_km} km
+              </div>
+            </div>
+            <div>
+              <div style="font-size: 11px; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                Displacement
+              </div>
+              <div style="font-size: 14px; font-weight: 500; color: #495057; line-height: 1.2;">
+                ${data.straight_distance_km} km
+              </div>
+            </div>
+          `;
+        }
+        routeDetailsDisplay.style.display = "block";
+
+        // Display route information with prominent distance and time
+        let infoHtml = `<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px; border-radius: 6px; margin-bottom: 8px;">
+          <div style="font-size: 18px; font-weight: bold; margin-bottom: 8px;">
+            <i class="fa fa-route"></i> Route Information
+          </div>
+          <div style="background: rgba(255,255,255,0.2); padding: 8px; border-radius: 4px; margin-bottom: 6px;">
+            <div style="font-size: 12px; opacity: 0.9;">From</div>
+            <div style="font-weight: bold;">${selectedFrom.label}</div>
+          </div>
+          <div style="background: rgba(255,255,255,0.2); padding: 8px; border-radius: 4px; margin-bottom: 8px;">
+            <div style="font-size: 12px; opacity: 0.9;">To</div>
+            <div style="font-weight: bold;">${selectedTo.label}</div>
+          </div>`;
+
+        if (data.road_distance_km) {
+          const hours = Math.floor(data.road_duration_min / 60);
+          const minutes = Math.round(data.road_duration_min % 60);
+          const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+          infoHtml += `<div style="background: rgba(255,255,255,0.25); padding: 10px; border-radius: 4px; text-align: center; margin-bottom: 6px;">
+            <div style="font-size: 24px; font-weight: bold; margin-bottom: 4px;">
+              <i class="fa fa-road"></i> ${data.road_distance_km} km
+            </div>
+            <div style="font-size: 16px; opacity: 0.95;">
+              <i class="fa fa-clock-o"></i> ${timeStr}
+            </div>
+          </div>`;
+          infoHtml += `<div style="font-size: 11px; opacity: 0.8; text-align: center;">
+            Straight-line: ${data.straight_distance_km} km
+          </div>`;
+        } else {
+          infoHtml += `<div style="background: rgba(255,255,255,0.25); padding: 10px; border-radius: 4px; text-align: center; margin-bottom: 6px;">
+            <div style="font-size: 24px; font-weight: bold;">
+              <i class="fa fa-arrows-h"></i> ${data.straight_distance_km} km
+            </div>
+            <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">
+              Straight-line distance
+            </div>
+          </div>`;
+        }
+        infoHtml += `</div>`;
+        infoHtml += `<div style="font-size: 11px; color: #6c757d; text-align: center; margin-top: 4px;">
+          <i class="fa fa-info-circle"></i> Click on the route line to see details
+        </div>`;
+
+        routeInfoEl.innerHTML = infoHtml;
+        routeInfoEl.style.color = "#0c5460";
+        clearRouteBtn.style.display = "block";
+      } else {
+        throw new Error("Failed to fetch route");
+      }
+    } catch (err) {
+      console.error("Route error:", err);
+      routeInfoEl.innerHTML = `<span style="color: #dc3545;"><i class="fa fa-exclamation-triangle"></i> Error calculating route. Please try again.</span>`;
+    }
+  }
+
+  function clearRoute() {
+    if (routePolyline) {
+      routeLayer.removeLayer(routePolyline);
+      routePolyline = null;
+    }
+    routeMarkers.forEach((marker) => routeLayer.removeLayer(marker));
+    routeMarkers = [];
+
+    document.getElementById("route-info").style.display = "none";
+    document.getElementById("route-details-display").style.display = "none";
+    document.getElementById("clear-route-btn").style.display = "none";
+  }
+
+  function clearRouteSelection() {
+    selectedFrom = null;
+    selectedTo = null;
+    document.getElementById("route-from").innerHTML =
+      "Click on a marker on the map";
+    document.getElementById("route-from").style.color = "#6c757d";
+    document.getElementById("route-from").style.borderColor = "#bee5eb";
+    document.getElementById("route-to").innerHTML =
+      "Click on a marker on the map";
+    document.getElementById("route-to").style.color = "#6c757d";
+    document.getElementById("route-to").style.borderColor = "#bee5eb";
+    document.getElementById("show-route-btn").disabled = true;
+    clearRoute();
+  }
+
+  // Event handlers for route buttons
+  document
+    .getElementById("show-route-btn")
+    .addEventListener("click", showRoute);
+  document
+    .getElementById("clear-route-btn")
+    .addEventListener("click", clearRouteSelection);
+
+  // Also clear route when clearing search
+  const originalClearBtn = document.getElementById("clear-btn");
+  const originalClearHandler = originalClearBtn.onclick;
+  document.getElementById("clear-btn").addEventListener("click", () => {
+    clearRouteSelection();
   });
 </script>
 {% endblock %}
