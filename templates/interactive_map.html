@@ -290,6 +290,7 @@ block content %}
   crossorigin=""
 ></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
 <script>
   // Declare map variable globally
   let map;
@@ -299,8 +300,11 @@ block content %}
     serviceLayer,
     bpLayer,
     trafficLayer,
-    boundaryLayer;
+    boundaryLayer,
+    darkOverlayLayer;
   let layerControl;
+  let currentBoundaries = null; // Store current boundaries for overlay updates
+  let overlayUpdateTimeout = null; // Debounce overlay updates
 
   // Define marker styles globally so they're accessible everywhere
   const customerStyle = {
@@ -482,6 +486,7 @@ block content %}
     bpLayer = L.layerGroup().addTo(map);
     trafficLayer = L.layerGroup().addTo(map);
     boundaryLayer = L.layerGroup().addTo(map);
+    darkOverlayLayer = L.layerGroup().addTo(map);
 
     // Create layer control with all layers
     const baseLayers = {};
@@ -520,6 +525,29 @@ block content %}
     searchAreaInput.addEventListener("input", updateRadiusVisibility);
     searchPostcodeInput.addEventListener("input", updateRadiusVisibility);
     updateRadiusVisibility(); // Initialize on page load
+
+    // Add event listeners to update dark overlay when map is moved or zoomed
+    // Use debouncing to prevent excessive updates during rapid movements
+    function updateOverlayDebounced() {
+      if (overlayUpdateTimeout) {
+        clearTimeout(overlayUpdateTimeout);
+      }
+      overlayUpdateTimeout = setTimeout(() => {
+        if (currentBoundaries && currentBoundaries.length > 0) {
+          createDarkOverlay(currentBoundaries);
+        }
+      }, 150); // Wait 150ms after movement stops
+    }
+
+    map.on("moveend", updateOverlayDebounced);
+    map.on("zoomend", updateOverlayDebounced);
+    map.on("resize", function () {
+      if (currentBoundaries && currentBoundaries.length > 0) {
+        setTimeout(() => {
+          createDarkOverlay(currentBoundaries);
+        }, 100);
+      }
+    });
   });
 
   function renderBoundary(boundaryPayload, color) {
@@ -561,6 +589,178 @@ block content %}
       return circle.getBounds();
     }
     return null;
+  }
+
+  // Function to create dark overlay with holes for searched boundaries
+  function createDarkOverlay(boundaries) {
+    if (!darkOverlayLayer || !boundaries || boundaries.length === 0) {
+      return;
+    }
+
+    // Check if Turf.js is available
+    if (typeof turf === "undefined") {
+      console.warn("Turf.js not loaded, falling back to simple overlay");
+      // Fallback to simple implementation without merging
+      return;
+    }
+
+    // Clear existing overlay
+    darkOverlayLayer.clearLayers();
+
+    // Get current map bounds
+    const mapBounds = map.getBounds();
+
+    // Create outer polygon covering the entire visible map
+    // GeoJSON uses [lon, lat] format
+    const outerRing = [
+      [mapBounds.getWest(), mapBounds.getSouth()], // Southwest
+      [mapBounds.getWest(), mapBounds.getNorth()], // Northwest
+      [mapBounds.getEast(), mapBounds.getNorth()], // Northeast
+      [mapBounds.getEast(), mapBounds.getSouth()], // Southeast
+      [mapBounds.getWest(), mapBounds.getSouth()], // Close the ring
+    ];
+
+    // Extract and convert all boundaries to GeoJSON polygons
+    const boundaryPolygons = [];
+    boundaries.forEach((boundaryEntry) => {
+      const boundary = boundaryEntry.boundary;
+      if (!boundary) return;
+
+      let polygonFeature = null;
+
+      if (boundary.type === "polygon" && boundary.feature) {
+        // Use the existing GeoJSON feature directly
+        polygonFeature = boundary.feature;
+      } else if (boundary.type === "rectangle" && boundary.feature) {
+        // Use the existing GeoJSON feature directly
+        polygonFeature = boundary.feature;
+      } else if (
+        boundary.type === "circle" &&
+        boundary.center &&
+        boundary.radius_km
+      ) {
+        // Create a circular polygon
+        const centerLat = boundary.center.lat;
+        const centerLon = boundary.center.lon;
+        const radius = boundary.radius_km * 1000; // Convert to meters
+        const points = 64; // Number of points to approximate circle
+        const coords = [];
+        for (let i = 0; i <= points; i++) {
+          const angle = (i / points) * 2 * Math.PI;
+          // Convert meters to degrees (approximate)
+          const latOffset = (radius / 111320) * Math.cos(angle);
+          const lonOffset =
+            (radius / (111320 * Math.cos((centerLat * Math.PI) / 180))) *
+            Math.sin(angle);
+          // GeoJSON uses [lon, lat] format
+          coords.push([centerLon + lonOffset, centerLat + latOffset]);
+        }
+        // Ensure the polygon is closed
+        if (coords.length > 0) {
+          const first = coords[0];
+          const last = coords[coords.length - 1];
+          if (
+            Math.abs(first[0] - last[0]) > 0.0001 ||
+            Math.abs(first[1] - last[1]) > 0.0001
+          ) {
+            coords.push([first[0], first[1]]);
+          }
+        }
+        polygonFeature = {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [coords],
+          },
+        };
+      }
+
+      if (polygonFeature && polygonFeature.geometry) {
+        boundaryPolygons.push(polygonFeature);
+      }
+    });
+
+    // If no valid boundaries, return
+    if (boundaryPolygons.length === 0) {
+      return;
+    }
+
+    // Merge all boundary polygons into a single polygon using Turf.js union
+    let mergedBoundary = boundaryPolygons[0];
+    for (let i = 1; i < boundaryPolygons.length; i++) {
+      try {
+        mergedBoundary = turf.union(mergedBoundary, boundaryPolygons[i]);
+      } catch (e) {
+        console.warn("Error merging boundaries:", e);
+        // If union fails, try to combine them manually or use the first boundary
+        mergedBoundary = boundaryPolygons[0];
+        break;
+      }
+    }
+
+    // Extract the merged coordinates - handle both Polygon and MultiPolygon
+    const holes = [];
+    if (mergedBoundary && mergedBoundary.geometry) {
+      if (mergedBoundary.geometry.type === "Polygon") {
+        // Single polygon - use its outer ring as a hole
+        const coords = mergedBoundary.geometry.coordinates[0];
+        if (coords && coords.length > 0) {
+          // Ensure the hole is closed
+          const first = coords[0];
+          const last = coords[coords.length - 1];
+          if (
+            Math.abs(first[0] - last[0]) > 0.0001 ||
+            Math.abs(first[1] - last[1]) > 0.0001
+          ) {
+            coords.push([first[0], first[1]]);
+          }
+          holes.push(coords);
+        }
+      } else if (mergedBoundary.geometry.type === "MultiPolygon") {
+        // Multiple polygons (non-overlapping boundaries) - create a hole for each
+        mergedBoundary.geometry.coordinates.forEach((polygon) => {
+          if (polygon && polygon[0] && polygon[0].length > 0) {
+            const coords = polygon[0]; // Use outer ring
+            // Ensure the hole is closed
+            const first = coords[0];
+            const last = coords[coords.length - 1];
+            if (
+              Math.abs(first[0] - last[0]) > 0.0001 ||
+              Math.abs(first[1] - last[1]) > 0.0001
+            ) {
+              coords.push([first[0], first[1]]);
+            }
+            holes.push(coords);
+          }
+        });
+      }
+    }
+
+    // Create GeoJSON polygon with merged hole
+    // First ring is outer boundary, second ring is the merged hole
+    const polygonCoords = [outerRing, ...holes];
+
+    const darkOverlayFeature = {
+      type: "Feature",
+      geometry: {
+        type: "Polygon",
+        coordinates: polygonCoords,
+      },
+      properties: {
+        name: "Dark Overlay",
+      },
+    };
+
+    // Add the dark overlay to the map
+    L.geoJSON(darkOverlayFeature, {
+      style: {
+        fillColor: "#000000",
+        fillOpacity: 0.7,
+        color: "#000000",
+        weight: 0,
+        interactive: false,
+      },
+    }).addTo(darkOverlayLayer);
   }
 
   async function runSearch() {
@@ -849,6 +1049,9 @@ block content %}
 
       const boundaries = data.boundaries;
 
+      // Store current boundaries for overlay updates
+      currentBoundaries = boundaries;
+
       // Clear all layers
       customersLayer.clearLayers();
       customerCirclesLayer.clearLayers();
@@ -856,6 +1059,7 @@ block content %}
       bpLayer.clearLayers();
       trafficLayer.clearLayers();
       boundaryLayer.clearLayers();
+      darkOverlayLayer.clearLayers();
       heatmapLayer = null;
 
       const bounds = [];
@@ -1047,16 +1251,27 @@ block content %}
           map.fitBounds(mapBounds, { padding: [20, 20] });
           setTimeout(() => {
             map.invalidateSize();
+            // Create dark overlay after map has been fitted to bounds
+            createDarkOverlay(boundaries);
           }, 100);
         } catch (e) {
           console.warn("Error fitting bounds:", e);
+          // Create dark overlay even if fitBounds fails
+          createDarkOverlay(boundaries);
         }
       } else if (bounds.length > 0) {
         map.setView(bounds[0], 12);
+        setTimeout(() => {
+          createDarkOverlay(boundaries);
+        }, 100);
       } else if (boundaries[0]?.center) {
         map.setView([boundaries[0].center.lat, boundaries[0].center.lon], 12);
+        setTimeout(() => {
+          createDarkOverlay(boundaries);
+        }, 100);
       } else {
         map.setView([4.5, 109.0], 6);
+        createDarkOverlay(boundaries);
       }
 
       // Count total results
@@ -1145,6 +1360,10 @@ block content %}
     bpLayer.clearLayers();
     trafficLayer.clearLayers();
     boundaryLayer.clearLayers();
+    darkOverlayLayer.clearLayers();
+
+    // Clear stored boundaries
+    currentBoundaries = null;
 
     map.setView([4.5, 109.0], 6);
     // Force resize on mobile
