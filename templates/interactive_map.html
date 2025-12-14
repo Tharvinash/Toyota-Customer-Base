@@ -6,6 +6,30 @@ block content %}
     margin-bottom: 1.5rem !important;
   }
 
+  /* Make container full-width to use all available space */
+  main.container,
+  .container {
+    max-width: 100% !important;
+    padding-left: 15px !important;
+    padding-right: 15px !important;
+  }
+
+  /* Remove side margins from row and card */
+  .row.mb-3 {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .row.mb-3 .col-md-12 {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .card {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
   /* Mobile-specific fixes for map visibility */
   @media (max-width: 768px) {
     main.container {
@@ -39,13 +63,14 @@ block content %}
       height: 100% !important;
       width: 100% !important;
     }
-    .row.mb-3 {
-      margin-left: 0 !important;
-      margin-right: 0 !important;
+    .card-body > div > div {
+      width: 100% !important;
     }
-    .card {
-      margin-left: 0 !important;
-      margin-right: 0 !important;
+    .card-body .form-control {
+      width: 100% !important;
+    }
+    .card-body .btn {
+      width: 100% !important;
     }
     /* Ensure Leaflet container is visible */
     .leaflet-container {
@@ -62,23 +87,53 @@ block content %}
   <div class="col-md-12">
     <div class="card">
       <div class="card-body">
-        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-          <select
-            id="search-type"
-            class="form-select me-2"
-            style="max-width: 200px"
-          >
-            <option value="state">State</option>
-            <option value="area" selected>Area/Township</option>
-            <option value="postcode">Postcode</option>
-          </select>
-          <input
-            id="search-term"
-            class="form-control me-2"
-            placeholder="Enter state, area, or postcode"
-            style="max-width: 400px"
-          />
-          <div id="radius-container" class="me-2">
+        <div class="mb-2">
+          <div class="mb-2">
+            <label
+              for="search-state"
+              class="form-label small mb-1"
+              style="font-size: 14px; color: #6c757d"
+              >State</label
+            >
+            <input
+              id="search-state"
+              class="form-control"
+              placeholder="e.g., Selangor, Kuala Lumpur"
+            />
+          </div>
+          <div class="mb-2">
+            <label
+              for="search-area"
+              class="form-label small mb-1"
+              style="font-size: 14px; color: #6c757d"
+              >Area/Township</label
+            >
+            <input
+              id="search-area"
+              class="form-control"
+              placeholder="e.g., Shah Alam, Subang Jaya"
+            />
+          </div>
+          <div class="mb-2">
+            <label
+              for="search-postcode"
+              class="form-label small mb-1"
+              style="font-size: 14px; color: #6c757d"
+              >Postcode</label
+            >
+            <input
+              id="search-postcode"
+              class="form-control"
+              placeholder="e.g., 40400, 47300"
+            />
+          </div>
+          <div id="radius-container" class="mb-2" style="display: none">
+            <label
+              for="search-radius"
+              class="form-label small mb-1"
+              style="font-size: 12px; color: #6c757d"
+              >Radius (km)</label
+            >
             <input
               id="search-radius"
               class="form-control"
@@ -86,20 +141,27 @@ block content %}
               value="10"
               min="1"
               max="100"
-              style="max-width: 120px"
-              placeholder="Radius (km)"
+              placeholder="Radius"
             />
           </div>
-          <button id="search-btn" class="btn btn-primary me-2">Search</button>
-          <button id="clear-btn" class="btn btn-outline-secondary me-2">
-            Clear
-          </button>
-          <span id="search-status" class="text-muted small"></span>
+          <div class="mb-2">
+            <button id="search-btn" class="btn btn-primary w-100">
+              Search
+            </button>
+          </div>
+          <div class="mb-2">
+            <button id="clear-btn" class="btn btn-outline-secondary w-100">
+              Clear
+            </button>
+          </div>
+          <div class="mb-2">
+            <span id="search-status" class="text-muted small"></span>
+          </div>
         </div>
         <div
           class="tips-ui"
           style="
-            font-size: 12px;
+            font-size: 14px;
             color: #6c757d;
             padding: 8px;
             background-color: #f8f9fa;
@@ -109,9 +171,9 @@ block content %}
         >
           <strong>Tips:</strong>
           <span id="search-tips"
-            >Enter comma-separated values (e.g.,
-            <code>Selangor, Kuala Lumpur</code> or
-            <code>40400, 47300</code>).</span
+            >Enter values in any combination. Radius is available for
+            Area/Township and Postcode searches. You can enter comma-separated
+            values for multiple locations.</span
           >
         </div>
       </div>
@@ -439,31 +501,25 @@ block content %}
       })
       .addTo(map);
 
-    // Show/hide radius input based on search type
-    const searchTypeSelect = document.getElementById("search-type");
+    // Show/hide radius input based on area/postcode inputs
+    const searchStateInput = document.getElementById("search-state");
+    const searchAreaInput = document.getElementById("search-area");
+    const searchPostcodeInput = document.getElementById("search-postcode");
     const radiusContainer = document.getElementById("radius-container");
-    const searchTips = document.getElementById("search-tips");
 
-    function updateSearchUI() {
-      const searchType = searchTypeSelect.value;
-      if (searchType === "state") {
-        radiusContainer.style.display = "none";
-        searchTips.innerHTML =
-          "Enter Malaysian states (comma-separated), e.g., <code>Selangor, Kuala Lumpur</code>.";
-      } else {
+    function updateRadiusVisibility() {
+      const hasArea = searchAreaInput.value.trim().length > 0;
+      const hasPostcode = searchPostcodeInput.value.trim().length > 0;
+      if (hasArea || hasPostcode) {
         radiusContainer.style.display = "block";
-        if (searchType === "area") {
-          searchTips.innerHTML =
-            "Enter towns/townships (comma-separated), e.g., <code>Shah Alam, Subang Jaya</code>.";
-        } else {
-          searchTips.innerHTML =
-            "Enter 4-5 digit postcodes (comma-separated), e.g., <code>40400, 47300</code>.";
-        }
+      } else {
+        radiusContainer.style.display = "none";
       }
     }
 
-    searchTypeSelect.addEventListener("change", updateSearchUI);
-    updateSearchUI(); // Initialize on page load
+    searchAreaInput.addEventListener("input", updateRadiusVisibility);
+    searchPostcodeInput.addEventListener("input", updateRadiusVisibility);
+    updateRadiusVisibility(); // Initialize on page load
   });
 
   function renderBoundary(boundaryPayload, color) {
@@ -508,9 +564,10 @@ block content %}
   }
 
   async function runSearch() {
-    const termInput = document.getElementById("search-term");
+    const stateInput = document.getElementById("search-state");
+    const areaInput = document.getElementById("search-area");
+    const postcodeInput = document.getElementById("search-postcode");
     const radiusInput = document.getElementById("search-radius");
-    const searchTypeSelect = document.getElementById("search-type");
     const statusEl = document.getElementById("search-status");
 
     // Check if map and layers are initialized
@@ -528,33 +585,32 @@ block content %}
       return;
     }
 
-    const rawTermInput = termInput.value.trim();
-    const searchType = searchTypeSelect.value;
+    const stateValue = stateInput.value.trim();
+    const areaValue = areaInput.value.trim();
+    const postcodeValue = postcodeInput.value.trim();
     const radius = parseFloat(radiusInput.value);
 
-    if (!rawTermInput) {
-      statusEl.textContent = "Please enter a search term.";
+    // Check if at least one field has a value
+    if (!stateValue && !areaValue && !postcodeValue) {
+      statusEl.textContent =
+        "Please enter at least one search term (State, Area/Township, or Postcode).";
       statusEl.style.color = "#dc3545"; // Red for error
       return;
     }
 
-    const termList = rawTermInput
-      .split(",")
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0);
-    if (termList.length === 0) {
-      statusEl.textContent = "Please provide at least one search term.";
-      statusEl.style.color = "#dc3545";
-      return;
-    }
-    if (termList.length > MAX_SEARCH_TERMS) {
-      statusEl.textContent = `Maximum ${MAX_SEARCH_TERMS} locations per search.`;
-      statusEl.style.color = "#dc3545";
-      return;
-    }
-
-    if (searchType === "state") {
-      const invalidStates = termList.filter((t) => !isValidStateInput(t));
+    // Validate state inputs
+    let stateTerms = [];
+    if (stateValue) {
+      stateTerms = stateValue
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      if (stateTerms.length > MAX_SEARCH_TERMS) {
+        statusEl.textContent = `Maximum ${MAX_SEARCH_TERMS} states per search.`;
+        statusEl.style.color = "#dc3545";
+        return;
+      }
+      const invalidStates = stateTerms.filter((t) => !isValidStateInput(t));
       if (invalidStates.length) {
         statusEl.textContent = `Invalid Malaysian state(s): ${invalidStates.join(
           ", "
@@ -562,19 +618,21 @@ block content %}
         statusEl.style.color = "#dc3545";
         return;
       }
-    } else if (searchType === "postcode") {
-      const invalidPostcodes = termList.filter(
-        (t) => !/^\d{4,5}$/.test(t.replace(/\s+/g, ""))
-      );
-      if (invalidPostcodes.length) {
-        statusEl.textContent = `Postcodes must be 4 or 5 digits: ${invalidPostcodes.join(
-          ", "
-        )}`;
+    }
+
+    // Validate area inputs
+    let areaTerms = [];
+    if (areaValue) {
+      areaTerms = areaValue
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      if (areaTerms.length > MAX_SEARCH_TERMS) {
+        statusEl.textContent = `Maximum ${MAX_SEARCH_TERMS} areas per search.`;
         statusEl.style.color = "#dc3545";
         return;
       }
-    } else {
-      const invalidAreas = termList.filter((t) => /^\d/.test(t));
+      const invalidAreas = areaTerms.filter((t) => /^\d/.test(t));
       if (invalidAreas.length) {
         statusEl.textContent = `Area/Township names cannot start with a number: ${invalidAreas.join(
           ", "
@@ -584,11 +642,37 @@ block content %}
       }
     }
 
-    const normalizedTerm = termList.join(", ");
+    // Validate postcode inputs
+    let postcodeTerms = [];
+    if (postcodeValue) {
+      postcodeTerms = postcodeValue
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      if (postcodeTerms.length > MAX_SEARCH_TERMS) {
+        statusEl.textContent = `Maximum ${MAX_SEARCH_TERMS} postcodes per search.`;
+        statusEl.style.color = "#dc3545";
+        return;
+      }
+      const invalidPostcodes = postcodeTerms.filter(
+        (t) => !/^\d{4,5}$/.test(t.replace(/\s+/g, ""))
+      );
+      if (invalidPostcodes.length) {
+        statusEl.textContent = `Postcodes must be 4 or 5 digits: ${invalidPostcodes.join(
+          ", "
+        )}`;
+        statusEl.style.color = "#dc3545";
+        return;
+      }
+    }
 
     // Validate radius for area/postcode searches
-    if (searchType !== "state" && (!radius || radius <= 0)) {
-      statusEl.textContent = "Radius must be a positive number.";
+    if (
+      (areaTerms.length > 0 || postcodeTerms.length > 0) &&
+      (!radius || radius <= 0)
+    ) {
+      statusEl.textContent =
+        "Radius must be a positive number for Area/Township and Postcode searches.";
       statusEl.style.color = "#dc3545"; // Red for error
       return;
     }
@@ -597,43 +681,173 @@ block content %}
     statusEl.style.color = "#6c757d"; // Gray for loading
 
     try {
-      // Build API URL with search type
-      const params = new URLSearchParams({
-        term: normalizedTerm,
-        search_type: searchType,
-      });
+      // Collect all results
+      const allBoundaries = [];
+      const allCustomers = [];
+      const allService = [];
+      const allBP = [];
+      const allTraffic = [];
+      const allFailedTerms = [];
+      let combinedRadius = null;
 
-      if (searchType !== "state") {
-        params.append("radius_km", radius.toString());
+      // Search by state
+      if (stateTerms.length > 0) {
+        const params = new URLSearchParams({
+          term: stateTerms.join(", "),
+          search_type: "state",
+        });
+        const url = `/api/search?${params.toString()}`;
+        const resp = await fetch(url);
+
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && Array.isArray(data.boundaries)) {
+            allBoundaries.push(...data.boundaries);
+            if (data.customers) allCustomers.push(...data.customers);
+            if (data.service) allService.push(...data.service);
+            if (data.bp) allBP.push(...data.bp);
+            if (data.traffic) allTraffic.push(...data.traffic);
+            if (data.failed_terms) allFailedTerms.push(...data.failed_terms);
+          }
+        } else {
+          try {
+            const errorData = await resp.json();
+            if (errorData && errorData.detail) {
+              allFailedTerms.push({
+                term: stateTerms.join(", "),
+                reason: errorData.detail,
+              });
+            }
+          } catch (e) {
+            allFailedTerms.push({
+              term: stateTerms.join(", "),
+              reason: "Location not found",
+            });
+          }
+        }
       }
 
-      const url = `/api/search?${params.toString()}`;
-      const resp = await fetch(url);
-
-      if (!resp.ok) {
-        let detail = "Location not found. Please try a different search term.";
-        try {
-          const errorData = await resp.json();
-          if (errorData && errorData.detail) {
-            detail = errorData.detail;
+      // Search by area
+      if (areaTerms.length > 0) {
+        const params = new URLSearchParams({
+          term: areaTerms.join(", "),
+          search_type: "area",
+          radius_km: radius.toString(),
+        });
+        const url = `/api/search?${params.toString()}`;
+        const resp = await fetch(url);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && Array.isArray(data.boundaries)) {
+            allBoundaries.push(...data.boundaries);
+            if (data.customers) allCustomers.push(...data.customers);
+            if (data.service) allService.push(...data.service);
+            if (data.bp) allBP.push(...data.bp);
+            if (data.traffic) allTraffic.push(...data.traffic);
+            if (data.failed_terms) allFailedTerms.push(...data.failed_terms);
+            if (data.radius_km) combinedRadius = data.radius_km;
           }
-        } catch (e) {}
+        } else {
+          try {
+            const errorData = await resp.json();
+            if (errorData && errorData.detail) {
+              allFailedTerms.push({
+                term: areaTerms.join(", "),
+                reason: errorData.detail,
+              });
+            }
+          } catch (e) {
+            allFailedTerms.push({
+              term: areaTerms.join(", "),
+              reason: "Location not found",
+            });
+          }
+        }
+      }
+
+      // Search by postcode
+      if (postcodeTerms.length > 0) {
+        const params = new URLSearchParams({
+          term: postcodeTerms.join(", "),
+          search_type: "postcode",
+          radius_km: radius.toString(),
+        });
+        const url = `/api/search?${params.toString()}`;
+        const resp = await fetch(url);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && Array.isArray(data.boundaries)) {
+            allBoundaries.push(...data.boundaries);
+            if (data.customers) allCustomers.push(...data.customers);
+            if (data.service) allService.push(...data.service);
+            if (data.bp) allBP.push(...data.bp);
+            if (data.traffic) allTraffic.push(...data.traffic);
+            if (data.failed_terms) allFailedTerms.push(...data.failed_terms);
+            if (data.radius_km) combinedRadius = data.radius_km;
+          }
+        } else {
+          try {
+            const errorData = await resp.json();
+            if (errorData && errorData.detail) {
+              allFailedTerms.push({
+                term: postcodeTerms.join(", "),
+                reason: errorData.detail,
+              });
+            }
+          } catch (e) {
+            allFailedTerms.push({
+              term: postcodeTerms.join(", "),
+              reason: "Location not found",
+            });
+          }
+        }
+      }
+
+      // Check if we have any results
+      if (allBoundaries.length === 0) {
+        let detail = "None of the locations were found.";
+        if (allFailedTerms.length > 0) {
+          detail =
+            "None of the locations were found: " +
+            allFailedTerms.map((ft) => ft.term).join(", ");
+        }
         statusEl.textContent = detail;
         statusEl.style.color = "#dc3545"; // Red for error
         return;
       }
 
-      const data = await resp.json();
+      // Combine data (remove duplicates based on lat/lon)
+      const seenCustomers = new Set();
+      const seenService = new Set();
+      const seenBP = new Set();
+      const seenTraffic = new Set();
 
-      // Validate response data
-      if (!data || !Array.isArray(data.boundaries)) {
-        throw new Error("Invalid response from server");
+      function deduplicateRecords(records, seenSet) {
+        return records.filter((rec) => {
+          const key = `${rec.lat.toFixed(6)},${rec.lon.toFixed(6)}`;
+          if (seenSet.has(key)) return false;
+          seenSet.add(key);
+          return true;
+        });
       }
+
+      const uniqueCustomers = deduplicateRecords(allCustomers, seenCustomers);
+      const uniqueService = deduplicateRecords(allService, seenService);
+      const uniqueBP = deduplicateRecords(allBP, seenBP);
+      const uniqueTraffic = deduplicateRecords(allTraffic, seenTraffic);
+
+      // Use combined data for rendering
+      const data = {
+        boundaries: allBoundaries,
+        customers: uniqueCustomers,
+        service: uniqueService,
+        bp: uniqueBP,
+        traffic: uniqueTraffic,
+        failed_terms: allFailedTerms,
+        radius_km: combinedRadius,
+      };
 
       const boundaries = data.boundaries;
-      if (!boundaries.length) {
-        throw new Error("No search areas returned by the server.");
-      }
 
       // Clear all layers
       customersLayer.clearLayers();
@@ -854,15 +1068,28 @@ block content %}
 
       // Build status message
       let statusMsg;
+      const searchTypes = [];
+      if (stateTerms.length > 0)
+        searchTypes.push(`${stateTerms.length} state(s)`);
+      if (areaTerms.length > 0) searchTypes.push(`${areaTerms.length} area(s)`);
+      if (postcodeTerms.length > 0)
+        searchTypes.push(`${postcodeTerms.length} postcode(s)`);
+
       if (totalResults > 0) {
-        statusMsg = `Found ${totalResults} result(s) across ${boundaries.length} location(s).`;
-        if (searchType !== "state" && data.radius_km) {
-          statusMsg += ` (radius ${data.radius_km} km)`;
+        statusMsg = `Found ${totalResults} result(s) across ${boundaries.length} location(s)`;
+        if (searchTypes.length > 0) {
+          statusMsg += ` (${searchTypes.join(", ")})`;
+        }
+        if (combinedRadius) {
+          statusMsg += ` (radius ${combinedRadius} km)`;
         }
       } else {
-        statusMsg = `No results found across ${boundaries.length} location(s).`;
-        if (searchType !== "state" && data.radius_km) {
-          statusMsg += ` Try increasing the radius (currently ${data.radius_km} km).`;
+        statusMsg = `No results found across ${boundaries.length} location(s)`;
+        if (searchTypes.length > 0) {
+          statusMsg += ` (${searchTypes.join(", ")})`;
+        }
+        if (combinedRadius) {
+          statusMsg += `. Try increasing the radius (currently ${combinedRadius} km).`;
         }
       }
       const failedTerms = Array.isArray(data.failed_terms)
@@ -891,14 +1118,21 @@ block content %}
     .addEventListener("click", () => runSearch());
 
   document.getElementById("clear-btn").addEventListener("click", () => {
-    const termInput = document.getElementById("search-term");
+    const stateInput = document.getElementById("search-state");
+    const areaInput = document.getElementById("search-area");
+    const postcodeInput = document.getElementById("search-postcode");
     const radiusInput = document.getElementById("search-radius");
     const statusEl = document.getElementById("search-status");
 
-    termInput.value = "";
+    stateInput.value = "";
+    areaInput.value = "";
+    postcodeInput.value = "";
     radiusInput.value = "10";
     statusEl.textContent = "";
     statusEl.style.color = ""; // Reset color
+
+    // Hide radius container
+    document.getElementById("radius-container").style.display = "none";
 
     // Remove heatmap if it exists
     if (heatmapLayer) {
@@ -919,7 +1153,23 @@ block content %}
     }, 100);
   });
 
-  document.getElementById("search-term").addEventListener("keyup", (e) => {
+  // Allow Enter key to trigger search from any input
+  document.getElementById("search-state").addEventListener("keyup", (e) => {
+    if (e.key === "Enter") {
+      runSearch();
+    }
+  });
+  document.getElementById("search-area").addEventListener("keyup", (e) => {
+    if (e.key === "Enter") {
+      runSearch();
+    }
+  });
+  document.getElementById("search-postcode").addEventListener("keyup", (e) => {
+    if (e.key === "Enter") {
+      runSearch();
+    }
+  });
+  document.getElementById("search-radius").addEventListener("keyup", (e) => {
     if (e.key === "Enter") {
       runSearch();
     }
