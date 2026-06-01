@@ -264,6 +264,10 @@ block content %}
     background: transparent;
     border: 0;
   }
+  #map-container.state-only-view,
+  #map-container.state-only-view .leaflet-container {
+    background: #ffffff;
+  }
   @media (max-width: 768px) {
     #map-container {
       height: calc(100vh - 180px) !important;
@@ -622,13 +626,34 @@ block content %}
     
     // Draw boundary if available
     if (data.boundary && data.boundary.feature) {
+      renderStateTileMask(data.boundary.feature);
       const geoLayer = L.geoJSON(data.boundary.feature, {
-        interactive: false,
+        interactive: true,
         style: {
           color: "#1890ff",
           weight: 3,
-          fillColor: "#1890ff",
-          fillOpacity: 0.05,
+          fillColor: "#f8fbff",
+          fillOpacity: 0.12,
+        },
+        onEachFeature: (feature, layer) => {
+          const stateName =
+            feature &&
+            feature.properties &&
+            feature.properties.display_name
+              ? feature.properties.display_name
+              : data.state || "Selected State";
+          layer.bindPopup(`<strong>${stateName}</strong>`);
+          layer.on({
+            mouseover: () =>
+              layer.setStyle({
+                color: "#0d6efd",
+                weight: 4,
+                fillColor: "#eef6ff",
+                fillOpacity: 0.18,
+              }),
+            mouseout: () =>
+              geoLayer.resetStyle(layer),
+          });
         },
       }).addTo(boundaryLayer);
       boundaryBoundsForFit = geoLayer.getBounds();
@@ -637,7 +662,8 @@ block content %}
     // Fit map to bounds
     if (boundaryBoundsForFit && boundaryBoundsForFit.isValid()) {
       try {
-        map.setMaxBounds(boundaryBoundsForFit.pad(0.25));
+        setStateOnlyMapMode(true);
+        map.setMaxBounds(boundaryBoundsForFit.pad(0.08));
         map.fitBounds(boundaryBoundsForFit, { padding: [20, 20] });
         setTimeout(() => map.invalidateSize(), 100);
       } catch (e) {
@@ -646,9 +672,7 @@ block content %}
     } else if (bounds.length > 0) {
       try {
         const mapBounds = L.latLngBounds(bounds);
-        if (malaysiaBounds) {
-          map.setMaxBounds(malaysiaBounds);
-        }
+        setStateOnlyMapMode(false);
         map.fitBounds(mapBounds, { padding: [20, 20] });
         setTimeout(() => map.invalidateSize(), 100);
       } catch (e) {
@@ -684,9 +708,7 @@ block content %}
     trafficLayer.clearLayers();
     boundaryLayer.clearLayers();
     
-    if (malaysiaBounds) {
-      map.setMaxBounds(malaysiaBounds);
-    }
+    setStateOnlyMapMode(false);
     map.setView([4.5, 109.0], 6);
     setTimeout(() => map.invalidateSize(), 100);
   }
@@ -699,9 +721,11 @@ block content %}
     serviceLayer,
     bpLayer,
     trafficLayer,
+    stateTileMaskLayer,
     boundaryLayer;
   let layerControl;
   let malaysiaBounds;
+  let baseTileLayer;
 
   // Define marker styles globally so they're accessible everywhere
   const customerStyle = {
@@ -831,6 +855,82 @@ block content %}
     });
   }
 
+  function clearStateTileMask() {
+    if (stateTileMaskLayer) {
+      stateTileMaskLayer.clearLayers();
+    }
+  }
+
+  function geoJsonExteriorRingsToLatLngs(feature) {
+    const geometry = feature && feature.geometry;
+    if (!geometry || !geometry.coordinates) {
+      return [];
+    }
+
+    const polygons =
+      geometry.type === "Polygon"
+        ? [geometry.coordinates]
+        : geometry.type === "MultiPolygon"
+          ? geometry.coordinates
+          : [];
+
+    return polygons
+      .map((polygon) => polygon && polygon[0])
+      .filter((ring) => Array.isArray(ring) && ring.length > 0)
+      .map((ring) => ring.map((coord) => [coord[1], coord[0]]));
+  }
+
+  function renderStateTileMask(feature) {
+    clearStateTileMask();
+    if (!stateTileMaskLayer || !feature) {
+      return;
+    }
+
+    const stateHoles = geoJsonExteriorRingsToLatLngs(feature);
+    if (!stateHoles.length) {
+      return;
+    }
+
+    const outsideWorld = [
+      [-90, -180],
+      [-90, 180],
+      [90, 180],
+      [90, -180],
+    ];
+
+    L.polygon([outsideWorld, ...stateHoles], {
+      pane: "stateMaskPane",
+      stroke: false,
+      fillColor: "#ffffff",
+      fillOpacity: 1,
+      interactive: false,
+    }).addTo(stateTileMaskLayer);
+  }
+
+  function setStateOnlyMapMode(enabled) {
+    if (!map) return;
+
+    const mapContainer = document.getElementById("map-container");
+    if (mapContainer) {
+      mapContainer.classList.toggle("state-only-view", enabled);
+    }
+
+    if (enabled) {
+      if (baseTileLayer && !map.hasLayer(baseTileLayer)) {
+        baseTileLayer.addTo(map);
+      }
+      return;
+    }
+
+    clearStateTileMask();
+    if (baseTileLayer && !map.hasLayer(baseTileLayer)) {
+      baseTileLayer.addTo(map);
+    }
+    if (malaysiaBounds) {
+      map.setMaxBounds(malaysiaBounds);
+    }
+  }
+
   // Wait for DOM to be fully loaded before initializing map
   document.addEventListener("DOMContentLoaded", function () {
     renderDensityLegend();
@@ -889,10 +989,14 @@ block content %}
       map.invalidateSize();
     }, 500);
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    baseTileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
+
+    map.createPane("stateMaskPane");
+    map.getPane("stateMaskPane").style.zIndex = 350;
+    map.getPane("stateMaskPane").style.pointerEvents = "none";
 
     // Initialize layers
     heatmapLayer = null; // Will be created when data is available
@@ -901,6 +1005,7 @@ block content %}
     serviceLayer = L.layerGroup().addTo(map);
     bpLayer = L.layerGroup().addTo(map);
     trafficLayer = L.layerGroup().addTo(map);
+    stateTileMaskLayer = L.layerGroup().addTo(map);
     boundaryLayer = L.layerGroup().addTo(map);
 
     // Create layer control with all layers
