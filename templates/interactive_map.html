@@ -316,7 +316,6 @@ block content %}
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
   crossorigin=""
 ></script>
-<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script>
   // Master data for cascading dropdowns
   let masterData = null;
@@ -490,7 +489,6 @@ block content %}
       bpLayer.clearLayers();
       trafficLayer.clearLayers();
       boundaryLayer.clearLayers();
-      heatmapLayer = null;
       
       // Render data (reuse existing rendering functions)
       renderFilteredData(data);
@@ -523,7 +521,15 @@ block content %}
             lat: customer.lat,
             lon: customer.lon,
             weight: 0,
+            locationNames: [],
           };
+        }
+        const locationName = getCustomerLocationName(customer);
+        if (
+          locationName &&
+          !heatmapData[key].locationNames.includes(locationName)
+        ) {
+          heatmapData[key].locationNames.push(locationName);
         }
         const weightValue = Number(customer.weight);
         const contribution = Number.isFinite(weightValue) ? weightValue : 1;
@@ -554,23 +560,10 @@ block content %}
           intensity,
           color: bucket.color,
           label: bucket.label,
+          locationNames: point.locationNames,
           raw: rawWeight,
         };
       });
-      
-      heatmapLayer = L.heatLayer(
-        bucketedPoints.map((pt) => [pt.lat, pt.lon, pt.intensity]),
-        {
-          radius: 25,
-          blur: 15,
-          maxZoom: 17,
-          gradient: densityBuckets.reduce((grad, bucket, idx) => {
-            grad[idx / (densityBuckets.length - 1 || 1)] = bucket.color;
-            return grad;
-          }, {}),
-        }
-      );
-      customersLayer.addLayer(heatmapLayer);
       
       bucketedPoints.forEach((pt) => {
         const radius = pt.raw < 1000 ? 8 : pt.raw < 2000 ? 12 : 
@@ -584,10 +577,19 @@ block content %}
           fillOpacity: 0.7,
           weight: 2,
           opacity: 0.9,
-        }).bindPopup(`<strong>${pt.label}</strong><br>Customers: ${pt.raw.toLocaleString()}`);
+        });
+        const locationName = pt.locationNames.length
+          ? pt.locationNames.join(", ")
+          : "Unknown location";
+        circle.bindPopup(
+          `<strong>${escapeHtml(locationName)}</strong><br>` +
+            `Customer Density: ${pt.raw.toLocaleString()}<br>` +
+            `Range: ${escapeHtml(formatDensityLabel(pt.label))}`
+        );
         circle.addTo(customerCirclesLayer);
         bounds.push([pt.lat, pt.lon]);
       });
+    } else {
     }
     
     // Add markers
@@ -609,7 +611,7 @@ block content %}
         for (const [k, v] of Object.entries(props)) {
           if (k === "label") continue;
           if (v !== null && v !== undefined && v !== "") {
-            lines.push(`<b>${k}</b>: ${v}`);
+            lines.push(`<b>${formatPopupFieldLabel(k)}</b>: ${escapeHtml(v)}`);
           }
         }
         if (lines.length) {
@@ -628,32 +630,12 @@ block content %}
     if (data.boundary && data.boundary.feature) {
       renderStateTileMask(data.boundary.feature);
       const geoLayer = L.geoJSON(data.boundary.feature, {
-        interactive: true,
+        interactive: false,
         style: {
           color: "#1890ff",
           weight: 3,
           fillColor: "#f8fbff",
           fillOpacity: 0.12,
-        },
-        onEachFeature: (feature, layer) => {
-          const stateName =
-            feature &&
-            feature.properties &&
-            feature.properties.display_name
-              ? feature.properties.display_name
-              : data.state || "Selected State";
-          layer.bindPopup(`<strong>${stateName}</strong>`);
-          layer.on({
-            mouseover: () =>
-              layer.setStyle({
-                color: "#0d6efd",
-                weight: 4,
-                fillColor: "#eef6ff",
-                fillOpacity: 0.18,
-              }),
-            mouseout: () =>
-              geoLayer.resetStyle(layer),
-          });
         },
       }).addTo(boundaryLayer);
       boundaryBoundsForFit = geoLayer.getBounds();
@@ -698,10 +680,6 @@ block content %}
     statusEl.textContent = "";
     
     // Clear map
-    if (heatmapLayer) {
-      map.removeLayer(heatmapLayer);
-      heatmapLayer = null;
-    }
     customersLayer.clearLayers();
     serviceLayer.clearLayers();
     bpLayer.clearLayers();
@@ -715,7 +693,6 @@ block content %}
 
   // Declare map variable globally
   let map;
-  let heatmapLayer;
   let customersLayer,
     customerCirclesLayer,
     serviceLayer,
@@ -830,11 +807,45 @@ block content %}
             margin-right:8px;
             background:${bucket.color};
           "></span>
-          <span style="font-size:12px;">${bucket.label}</span>
+          <span style="font-size:12px;">${formatDensityLabel(bucket.label)}</span>
         </div>
       `
       )
       .join("");
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function formatPopupFieldLabel(key) {
+    const labels = {
+      address: "Address",
+      city: "City",
+      state: "State",
+      postcode: "Postcode",
+      phone: "Phone",
+      email: "Email",
+      weight: "Customer Density",
+    };
+    return labels[key] || key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  function formatDensityLabel(label) {
+    return String(label || "").replace(/â€“|–/g, "-");
+  }
+
+  function getCustomerLocationName(customer) {
+    const city = customer.city || customer.label || "Unknown city";
+    const state = customer.state || "Unknown state";
+    const postcode = customer.postcode;
+    const postcodeText = postcode ? ` (${postcode})` : "";
+    return `City: ${city}${postcodeText}; State: ${state}`;
   }
 
   function createLocationMarker(latlng, style) {
@@ -999,7 +1010,6 @@ block content %}
     map.getPane("stateMaskPane").style.pointerEvents = "none";
 
     // Initialize layers
-    heatmapLayer = null; // Will be created when data is available
     customersLayer = L.layerGroup().addTo(map);
     customerCirclesLayer = L.layerGroup().addTo(map);
     serviceLayer = L.layerGroup().addTo(map);
@@ -1011,8 +1021,7 @@ block content %}
     // Create layer control with all layers
     const baseLayers = {};
     const overlayLayers = {
-      "Customer Density (Heatmap)": customersLayer,
-      "Customer Density (Circles)": customerCirclesLayer,
+      "Customer Density": customerCirclesLayer,
       "Toyota Service Outlets": serviceLayer,
       "Toyota Body & Paint": bpLayer,
       "Traffic Police Stations": trafficLayer,
@@ -1205,7 +1214,6 @@ block content %}
       bpLayer.clearLayers();
       trafficLayer.clearLayers();
       boundaryLayer.clearLayers();
-      heatmapLayer = null;
 
       const bounds = [];
 
@@ -1220,7 +1228,15 @@ block content %}
               lat: customer.lat,
               lon: customer.lon,
               weight: 0,
+              locationNames: [],
             };
+          }
+          const locationName = getCustomerLocationName(customer);
+          if (
+            locationName &&
+            !heatmapData[key].locationNames.includes(locationName)
+          ) {
+            heatmapData[key].locationNames.push(locationName);
           }
           const weightValue = Number(customer.weight);
           const contribution = Number.isFinite(weightValue) ? weightValue : 1;
@@ -1252,23 +1268,10 @@ block content %}
             intensity,
             color: bucket.color,
             label: bucket.label,
+            locationNames: point.locationNames,
             raw: rawWeight,
           };
         });
-
-        heatmapLayer = L.heatLayer(
-          bucketedPoints.map((pt) => [pt.lat, pt.lon, pt.intensity]),
-          {
-            radius: 25,
-            blur: 15,
-            maxZoom: 17,
-            gradient: densityBuckets.reduce((grad, bucket, idx) => {
-              grad[idx / (densityBuckets.length - 1 || 1)] = bucket.color;
-              return grad;
-            }, {}),
-          }
-        );
-        customersLayer.addLayer(heatmapLayer);
 
         bucketedPoints.forEach((pt) => {
           const radius =
@@ -1291,10 +1294,14 @@ block content %}
             fillOpacity: 0.7,
             weight: 2,
             opacity: 0.9,
-          }).bindPopup(
-            `<strong>${
-              pt.label
-            }</strong><br>Customers: ${pt.raw.toLocaleString()}`
+          });
+          const locationName = pt.locationNames.length
+            ? pt.locationNames.join(", ")
+            : "Unknown location";
+          circle.bindPopup(
+            `<strong>${escapeHtml(locationName)}</strong><br>` +
+              `Customer Density: ${pt.raw.toLocaleString()}<br>` +
+              `Range: ${escapeHtml(formatDensityLabel(pt.label))}`
           );
           circle.addTo(customerCirclesLayer);
           bounds.push([pt.lat, pt.lon]);
@@ -1305,8 +1312,9 @@ block content %}
           bucketedPoints[0]
         );
         if (dominantBucket) {
-          statusEl.textContent += ` | Highest density: ${dominantBucket.label}`;
+          statusEl.textContent += ` | Highest density: ${formatDensityLabel(dominantBucket.label)}`;
         }
+      } else {
       }
 
       // Add markers for other layers
@@ -1334,7 +1342,7 @@ block content %}
           for (const [k, v] of Object.entries(props)) {
             if (k === "label") continue;
             if (v !== null && v !== undefined && v !== "") {
-              lines.push(`<b>${k}</b>: ${v}`);
+              lines.push(`<b>${formatPopupFieldLabel(k)}</b>: ${escapeHtml(v)}`);
             }
           }
           if (lines.length) {

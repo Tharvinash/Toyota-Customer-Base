@@ -23,6 +23,7 @@ from db import (
 from map_utils import (
     ensure_latlon,
     get_admin1_feature,
+    normalize_state_name,
     geocode_location_with_details,
     geocode_multiple_locations,
     filter_by_radius,
@@ -82,7 +83,13 @@ def search_filtered(
         result = df.copy()
         
         if state_val and "state" in result.columns:
-            result = result[result["state"].astype(str).str.strip().str.lower() == state_val.lower()]
+            wanted_state = normalize_state_name(state_val) or state_val
+
+            def canonical_state(value: Any) -> str:
+                return (normalize_state_name(str(value)) or str(value)).strip().lower()
+
+            state_series = result["state"].apply(canonical_state)
+            result = result[state_series == wanted_state.lower()]
         
         if city_val and "city" in result.columns:
             result = result[result["city"].astype(str).str.strip().str.lower() == city_val.lower()]
@@ -291,7 +298,9 @@ def _validate_search_terms(terms: List[str], search_type: str) -> List[Dict[str,
 def _filter_df_by_states(df: pd.DataFrame, states_lower: List[str]) -> pd.DataFrame:
     if df.empty or "state" not in df.columns:
         return df.iloc[0:0].copy()
-    state_series = df["state"].astype(str).str.strip().str.lower()
+    state_series = df["state"].apply(
+        lambda value: (normalize_state_name(str(value)) or str(value)).strip().lower()
+    )
     mask = state_series.isin(set(states_lower))
     return df.loc[mask].copy()
 
