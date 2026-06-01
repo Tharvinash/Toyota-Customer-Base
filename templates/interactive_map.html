@@ -90,6 +90,13 @@ block content %}
           <button id="filter-clear-btn" class="btn btn-outline-secondary me-2">
             Clear
           </button>
+          <button
+            id="download-map-btn"
+            class="btn btn-outline-primary me-2"
+            disabled
+          >
+            Download Map
+          </button>
           <span id="filter-search-status" class="text-muted small"></span>
         </div>
         <div
@@ -268,6 +275,14 @@ block content %}
   #map-container.state-only-view .leaflet-container {
     background: #ffffff;
   }
+  #map-container.export-only .leaflet-control-zoom,
+  #map-container.export-only .leaflet-control-layers {
+    display: none !important;
+  }
+  #map-container.export-only #map-legend {
+    right: 14px !important;
+    bottom: 14px !important;
+  }
   @media (max-width: 768px) {
     #map-container {
       height: calc(100vh - 180px) !important;
@@ -316,10 +331,15 @@ block content %}
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
   crossorigin=""
 ></script>
+<script
+  src="https://cdn.jsdelivr.net/npm/dom-to-image-more@3.5.0/dist/dom-to-image-more.min.js"
+  crossorigin="anonymous"
+></script>
 <script>
   // Master data for cascading dropdowns
   let masterData = null;
   let stateSelect, citySelect, postcodeSelect;
+  let lastSearchLabel = "";
 
   // Load master data
   async function loadMasterData() {
@@ -497,6 +517,8 @@ block content %}
                           (data.bp?.length || 0) + (data.traffic?.length || 0);
       statusEl.textContent = `Found ${totalResults} result(s)${city ? ` in ${city}` : ""}${postcode ? `, postcode ${postcode}` : ""}`;
       statusEl.style.color = "#28a745";
+      lastSearchLabel = [state, city, postcode].filter(Boolean).join("-");
+      setDownloadButtonEnabled(true);
       
     } catch (err) {
       console.error("Filter search error:", err);
@@ -678,6 +700,8 @@ block content %}
     postcodeSelect.innerHTML = '<option value="">-- All Postcodes --</option>';
     postcodeSelect.disabled = true;
     statusEl.textContent = "";
+    lastSearchLabel = "";
+    setDownloadButtonEnabled(false);
     
     // Clear map
     customersLayer.clearLayers();
@@ -840,6 +864,102 @@ block content %}
     return String(label || "").replace(/â€“|–/g, "-");
   }
 
+  function setDownloadButtonEnabled(enabled) {
+    const button = document.getElementById("download-map-btn");
+    if (button) {
+      button.disabled = !enabled;
+    }
+  }
+
+  function safeFileName(value) {
+    return String(value || "map")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "map";
+  }
+
+  function setExportOnlyMode(enabled) {
+    const mapContainer = document.getElementById("map-container");
+    if (mapContainer) {
+      mapContainer.classList.toggle("export-only", enabled);
+    }
+  }
+
+  async function downloadCurrentMapImage() {
+    const button = document.getElementById("download-map-btn");
+    const statusEl = document.getElementById("filter-search-status");
+    const mapContainer = document.getElementById("map-container");
+
+    if (!mapContainer || !window.domtoimage) {
+      if (statusEl) {
+        statusEl.textContent = "Map image export is not ready yet.";
+        statusEl.style.color = "#dc3545";
+      }
+      return;
+    }
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Preparing...";
+    }
+    if (statusEl) {
+      statusEl.textContent = "Preparing map image...";
+      statusEl.style.color = "#6c757d";
+    }
+
+    try {
+      map.closePopup();
+      map.invalidateSize();
+      setExportOnlyMode(true);
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      const exportScale = Math.min(window.devicePixelRatio || 1, 2);
+      const dataUrl = await domtoimage.toPng(mapContainer, {
+        bgcolor: "#ffffff",
+        width: mapContainer.offsetWidth * exportScale,
+        height: mapContainer.offsetHeight * exportScale,
+        style: {
+          transform: `scale(${exportScale})`,
+          transformOrigin: "top left",
+          width: `${mapContainer.offsetWidth}px`,
+          height: `${mapContainer.offsetHeight}px`,
+        },
+        filter: (node) => {
+          if (!node.classList) return true;
+          return (
+            !node.classList.contains("leaflet-control-zoom") &&
+            !node.classList.contains("leaflet-control-layers")
+          );
+        },
+      });
+
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().slice(0, 10);
+      link.download = `toyota-map-${safeFileName(lastSearchLabel)}-${timestamp}.png`;
+      link.href = dataUrl;
+      link.click();
+
+      if (statusEl) {
+        statusEl.textContent = "Map image downloaded as PNG.";
+        statusEl.style.color = "#28a745";
+      }
+    } catch (err) {
+      console.error("Map download error:", err);
+      if (statusEl) {
+        statusEl.textContent = "Unable to download map image. Please try again after the map tiles finish loading.";
+        statusEl.style.color = "#dc3545";
+      }
+    } finally {
+      setExportOnlyMode(false);
+      if (button) {
+        button.disabled = !lastSearchLabel;
+        button.textContent = "Download Map";
+      }
+    }
+  }
+
   function getCustomerLocationName(customer) {
     const city = customer.city || customer.label || "Unknown city";
     const state = customer.state || "Unknown state";
@@ -951,6 +1071,7 @@ block content %}
     // Setup filter search button
     document.getElementById("filter-search-btn").addEventListener("click", runFilterSearch);
     document.getElementById("filter-clear-btn").addEventListener("click", clearFilter);
+    document.getElementById("download-map-btn").addEventListener("click", downloadCurrentMapImage);
     // Ensure map container is visible
     const mapContainer = document.getElementById("map-container");
     const mapDiv = document.getElementById("map");
@@ -1002,6 +1123,7 @@ block content %}
 
     baseTileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
+      crossOrigin: true,
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
