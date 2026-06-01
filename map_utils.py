@@ -3,6 +3,8 @@ import numpy as np
 import folium
 from folium.plugins import HeatMap, MarkerCluster, Fullscreen, MiniMap, MousePosition, MeasureControl
 from pathlib import Path
+import copy
+import json
 from typing import Any, Dict, Optional, Tuple, List
 import requests
 import time
@@ -12,6 +14,7 @@ DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 STATE = "Selangor"
 OUTPUT_HTML = DATA_DIR / "selangor_map.html"
+ADMIN1_GEOJSON = DATA_DIR / "malaysia_admin1.geojson"
 
 # Approximate bounding box for Malaysia (Peninsular + East Malaysia)
 # [south_lat, west_lon], [north_lat, east_lon]
@@ -32,9 +35,99 @@ CITY_LOOKUP = {
     "Sepang": (2.6930, 101.7490),
 }
 
+STATE_NAME_ALIASES = {
+    "johor": "Johor",
+    "kedah": "Kedah",
+    "kelantan": "Kelantan",
+    "melaka": "Melaka",
+    "malacca": "Melaka",
+    "negeri sembilan": "Negeri Sembilan",
+    "pahang": "Pahang",
+    "penang": "Pulau Pinang",
+    "pulau pinang": "Pulau Pinang",
+    "perak": "Perak",
+    "perlis": "Perlis",
+    "sabah": "Sabah",
+    "sarawak": "Sarawak",
+    "selangor": "Selangor",
+    "terengganu": "Terengganu",
+    "kuala lumpur": "Kuala Lumpur",
+    "wilayah persekutuan kuala lumpur": "Kuala Lumpur",
+    "wp kuala lumpur": "Kuala Lumpur",
+    "labuan": "Labuan",
+    "wilayah persekutuan labuan": "Labuan",
+    "wp labuan": "Labuan",
+    "putrajaya": "Putrajaya",
+    "wilayah persekutuan putrajaya": "Putrajaya",
+    "wp putrajaya": "Putrajaya",
+}
+
+GEOJSON_STATE_ALIASES = {
+    "malacca": "Melaka",
+    "penang": "Pulau Pinang",
+}
+
+_ADMIN1_FEATURES_BY_STATE: Optional[Dict[str, Dict[str, Any]]] = None
+
 
 def log(msg: str):
     print(f"[INFO] {msg}")
+
+
+def normalize_state_name(value: str) -> Optional[str]:
+    cleaned = str(value or "").strip().lower()
+    if cleaned.endswith(", malaysia"):
+        cleaned = cleaned[:-10].strip()
+    cleaned = cleaned.replace(".", " ").replace("-", " ")
+    cleaned = " ".join(cleaned.split())
+    return STATE_NAME_ALIASES.get(cleaned)
+
+
+def _load_admin1_features_by_state() -> Dict[str, Dict[str, Any]]:
+    global _ADMIN1_FEATURES_BY_STATE
+    if _ADMIN1_FEATURES_BY_STATE is not None:
+        return _ADMIN1_FEATURES_BY_STATE
+
+    features_by_state: Dict[str, Dict[str, Any]] = {}
+    if not ADMIN1_GEOJSON.exists():
+        _ADMIN1_FEATURES_BY_STATE = features_by_state
+        return features_by_state
+
+    with open(ADMIN1_GEOJSON, "r", encoding="utf-8") as f:
+        geojson = json.load(f)
+
+    for feature in geojson.get("features", []):
+        props = feature.get("properties") or {}
+        raw_name = (
+            props.get("shapeName")
+            or props.get("name")
+            or props.get("NAME_1")
+            or props.get("state")
+        )
+        canonical = normalize_state_name(str(raw_name or ""))
+        if not canonical:
+            canonical = GEOJSON_STATE_ALIASES.get(str(raw_name or "").strip().lower())
+        if canonical:
+            features_by_state[canonical.lower()] = feature
+
+    _ADMIN1_FEATURES_BY_STATE = features_by_state
+    return features_by_state
+
+
+def get_admin1_feature(state_name: str) -> Optional[Dict[str, Any]]:
+    canonical = normalize_state_name(state_name)
+    if not canonical:
+        return None
+
+    feature = _load_admin1_features_by_state().get(canonical.lower())
+    if not feature:
+        return None
+
+    state_feature = copy.deepcopy(feature)
+    props = state_feature.setdefault("properties", {})
+    props["display_name"] = canonical
+    props["source"] = "geoBoundaries ADM1"
+    return state_feature
 
 
 # ----------------- DATA HELPERS -----------------
@@ -50,14 +143,14 @@ def load_csv(name: str) -> pd.DataFrame:
     return df
 
 
-def ensure_latlon(df: pd.DataFrame) -> pd.DataFrame:
+def ensure_latlon(df: pd.DataFrame, state_filter: str | None = STATE) -> pd.DataFrame:
     if df.empty:
         return df.copy()
 
-    if "state" in df.columns:
+    if state_filter and "state" in df.columns:
         before = len(df)
-        df = df[df["state"].astype(str).str.strip().str.lower() == STATE.lower()].copy()
-        log(f"Filtered to state={STATE}: {before} -> {len(df)} rows")
+        df = df[df["state"].astype(str).str.strip().str.lower() == state_filter.lower()].copy()
+        log(f"Filtered to state={state_filter}: {before} -> {len(df)} rows")
 
     for key in ["lat", "lon"]:
         if key not in df.columns:
@@ -122,7 +215,8 @@ def add_legend_box(m: folium.Map, heat_labels: list[str]) -> None:
         f"""
         <div style="display:flex;align-items:center;margin:2px 0;">
           <span style="display:inline-block;width:18px;height:12px;
-                       background:{c};border:1px solid #666;margin-right:8px;"></span>
+                       background:{c};border:1px solid #666;border-radius:3px;
+                       margin-right:8px;"></span>
           <span style="font-size:12px;">{lab}</span>
         </div>
         """
@@ -142,14 +236,66 @@ def add_legend_box(m: folium.Map, heat_labels: list[str]) -> None:
       font-size: 14px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.12);
       min-width: 230px;">
-      <div style="font-weight:600;margin-bottom:6px;">Legend</div>
-      <div style="line-height:1.4;">
-        <div><i class="fa fa-wrench" style="color:blue"></i>&nbsp; Toyota Service Outlets</div>
-        <div><i class="fa fa-car"    style="color:green"></i>&nbsp; Toyota Body &amp; Paint</div>
-        <div><i class="fa fa-road"   style="color:red"></i>&nbsp; Traffic Police Stations</div>
+      <style>
+        .map-legend-title {{
+          align-items:center;
+          display:flex;
+          font-weight:600;
+          gap:8px;
+          margin-bottom:6px;
+        }}
+        .map-legend-list {{
+          display:grid;
+          gap:6px;
+          line-height:1.25;
+        }}
+        .map-legend-item {{
+          align-items:center;
+          display:flex;
+          gap:8px;
+        }}
+        .map-legend-icon {{
+          align-items:center;
+          border:2px solid #fff;
+          border-radius:50%;
+          box-shadow:0 1px 4px rgba(0,0,0,0.28);
+          color:#fff;
+          display:inline-flex;
+          flex:0 0 24px;
+          font-size:12px;
+          height:24px;
+          justify-content:center;
+          width:24px;
+        }}
+      </style>
+      <div class="map-legend-title">Legend</div>
+      <div class="map-legend-list">
+        <div class="map-legend-item">
+          <span class="map-legend-icon" style="background:#0d6efd;">
+            <i class="fa fa-wrench" aria-hidden="true"></i>
+          </span>
+          <span>Toyota Service Outlets</span>
+        </div>
+        <div class="map-legend-item">
+          <span class="map-legend-icon" style="background:#198754;">
+            <i class="fa fa-car" aria-hidden="true"></i>
+          </span>
+          <span>Toyota Body &amp; Paint</span>
+        </div>
+        <div class="map-legend-item">
+          <span class="map-legend-icon" style="background:#dc3545;">
+            <i class="fa fa-shield" aria-hidden="true"></i>
+          </span>
+          <span>Traffic Police Stations</span>
+        </div>
       </div>
       <hr style="margin:8px 0;">
-      <div style="font-weight:600;margin-bottom:4px;">Customer Density</div>
+      <div class="map-legend-title" style="margin-bottom:4px;">
+        <span class="map-legend-icon" style="background:#f46d43;flex-basis:22px;height:22px;width:22px;font-size:11px;">
+          <i class="fa fa-fire" aria-hidden="true"></i>
+        </span>
+        <span>Customer Density</span>
+      </div>
       {rows}
     </div>
     """

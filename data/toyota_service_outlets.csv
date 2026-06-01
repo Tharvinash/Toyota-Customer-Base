@@ -1,33 +1,150 @@
-﻿outlet name,City ,State,lat,lon
-Toyota 3S Panglima City Motor,Telok Panglima Garang,Selangor,2.94184,101.47269
-Toyota Sungai Rasah 4S | PCM Group - Sales,Klang,Selangor,3.05792,101.48745
-Toyota Puchong 4S | PCM Group - Sales,Puchong,Selangor,3.03949,101.60295
-PCM Semenyih Motor Sdn Bhd,Semenyih,Selangor,2.92772,101.85784
-Toyota Pandamaran 3S | PCM Group - Sales & Service,Pelabuhan Klang,Selangor,3.01674,101.42042
-Toyota Subang Jaya 4S | PCM Group - Sales,Subang Jaya,Selangor,3.08085,101.58119
-Toyota Banting 3S | PCM Group - Sales and Service,Banting,Selangor,2.81126,101.50479
-Toyota Kelana Jaya | Unitedstar Corporation (PCM Group),Petaling Jaya,Selangor,3.10969,101.59538
-UMW Toyotsu Motors Sdn Bhd - Toyota,Shah Alam,Selangor,3.06357,101.52354
-UMW Toyota Rawang,Rawang,Selangor,3.30515,101.54594
-Toyota 3S - Quayside Mall,Telok Panglima Garang,Selangor,2.95669,101.55312
-Distinctive Model - Toyota Service Centre Sungai Buloh,Sungai Buloh,Selangor,3.18804,101.57821
-Toyota Cyberjaya OSSB,Cyberjaya,Selangor,2.91984,101.63345
-TOYOTA BANGI SHOWROOM SEKSYEN 7 - Magna Viable Sdn Bhd,Bandar Baru Bangi,Selangor,2.97031,101.77328
-PCM Klang Motor Sdn. Bhd. - Toyota Body & Paint Kapar,Klang,Selangor,3.09655,101.38872
-Toyota Subang G-Mart Motor 4S Center.,Shah Alam,Selangor,3.16018,101.53178
-Toyota Kuala Selangor - Target Orion Corporation Sdn Bhd,Kuala Selangor,Selangor,3.30687,101.28337
-Toyota Cheras 4S Centre - Fokus Sentral Sdn Bhd,Cheras,Kuala Lumpur,3.10359,101.73425
-Toyota Setia Alam - Fokus Tetap Sdn. Bhd.,Shah Alam,Selangor,3.10919,101.44947
-TOYOTA SERVICE CENTER CHERAS BATU 10 PDC AUTOMOBILE SDN BHD,Cheras,Kuala Lumpur,3.05295,101.77348
-Toyota Balakong - Wing Hin Automobile 4S Centre (Service Centre),Seri Kembangan,Selangor,3.02808,101.75127
-Toyota Pandan Indah - Wing Hin Motor Sdn Bhd (Service Centre),Ampang,Selangor,3.13476,101.75892
-Toyota Wangsa Maju - Motozoom Sdn Bhd (Service Centre),Kuala Lumpur,Kuala Lumpur,3.1979,101.72704
-Toyota Section 19 - Laser Motor PJ,Petaling Jaya,Selangor,3.11192,101.63222
-Toyota Jalan 217 Petaling Jaya - Laser Motor 4S,Petaling Jaya,Selangor,3.09476,101.63522
-"Toyota Petaling Utama (Sales,Service & Topmark) - Laser Motor Services",Petaling Jaya,Selangor,3.07958,101.65062
-Toyota Puchong - Unihub Auto,Puchong,Selangor,3.04183,101.619
-Toyota Kajang 3S,Kajang,Selangor,2.98486,101.81438
-Toyota Sungai Besi-MTR Automobile Corporation Sdn Bhd,Sungai Besi,Kuala Lumpur,3.11903,101.70885
-Toyota Wheelcorp Old Klang Road,Kuala Lumpur,Kuala Lumpur,3.10808,101.67871
-Toyota Kepong - Wheelcorp Sdn Bhd 3S,Kepong,Kuala Lumpur,3.21515,101.64679
-Toyota Setapak 3S (Roda Express Auto Sdn Bhd),Setapak,Kuala Lumpur,3.19793,101.71449
+outlet code,outlet name,City ,State,address,postcode,lat,lon,phone,email
+,Toyota 3S Panglima City Motor,Telok Panglima Garang,Selangor,,,2.94184,101.47269,,
+,Toyota Sungai Rasah 4S | PCM Group - Sales,Klang,Selangor,,,3.05792,101.48745,,
+,Toyota Puchong 4S | PCM Group - Sales,Puchong,Selangor,,,3.03949,101.60295,,
+,PCM Semenyih Motor Sdn Bhd,Semenyih,Selangor,,,2.92772,101.85784,,
+,Toyota Pandamaran 3S | PCM Group - Sales & Service,Pelabuhan Klang,Selangor,,,3.01674,101.42042,,
+,Toyota Subang Jaya 4S | PCM Group - Sales,Subang Jaya,Selangor,,,3.08085,101.58119,,
+,Toyota Banting 3S | PCM Group - Sales and Service,Banting,Selangor,,,2.81126,101.50479,,
+,Toyota Kelana Jaya | Unitedstar Corporation (PCM Group),Petaling Jaya,Selangor,,,3.10969,101.59538,,
+,UMW Toyotsu Motors Sdn Bhd - Toyota,Shah Alam,Selangor,,,3.06357,101.52354,,
+,UMW Toyota Rawang,Rawang,Selangor,,,3.30515,101.54594,,
+,Toyota 3S - Quayside Mall,Telok Panglima Garang,Selangor,,,2.95669,101.55312,,
+,Distinctive Model - Toyota Service Centre Sungai Buloh,Sungai Buloh,Selangor,,,3.18804,101.57821,,
+,Toyota Cyberjaya OSSB,Cyberjaya,Selangor,,,2.91984,101.63345,,
+,TOYOTA BANGI SHOWROOM SEKSYEN 7 - Magna Viable Sdn Bhd,Bandar Baru Bangi,Selangor,,,2.97031,101.77328,,
+,PCM Klang Motor Sdn. Bhd. - Toyota Body & Paint Kapar,Klang,Selangor,,,3.09655,101.38872,,
+,Toyota Subang G-Mart Motor 4S Center.,Shah Alam,Selangor,,,3.16018,101.53178,,
+,Toyota Kuala Selangor - Target Orion Corporation Sdn Bhd,Kuala Selangor,Selangor,,,3.30687,101.28337,,
+,Toyota Cheras 4S Centre - Fokus Sentral Sdn Bhd,Cheras,Kuala Lumpur,,,3.10359,101.73425,,
+,Toyota Setia Alam - Fokus Tetap Sdn. Bhd.,Shah Alam,Selangor,,,3.10919,101.44947,,
+,TOYOTA SERVICE CENTER CHERAS BATU 10 PDC AUTOMOBILE SDN BHD,Cheras,Kuala Lumpur,,,3.05295,101.77348,,
+,Toyota Balakong - Wing Hin Automobile 4S Centre (Service Centre),Seri Kembangan,Selangor,,,3.02808,101.75127,,
+,Toyota Pandan Indah - Wing Hin Motor Sdn Bhd (Service Centre),Ampang,Selangor,,,3.13476,101.75892,,
+,Toyota Wangsa Maju - Motozoom Sdn Bhd (Service Centre),Kuala Lumpur,Kuala Lumpur,,,3.1979,101.72704,,
+,Toyota Section 19 - Laser Motor PJ,Petaling Jaya,Selangor,,,3.11192,101.63222,,
+,Toyota Jalan 217 Petaling Jaya - Laser Motor 4S,Petaling Jaya,Selangor,,,3.09476,101.63522,,
+,"Toyota Petaling Utama (Sales,Service & Topmark) - Laser Motor Services",Petaling Jaya,Selangor,,,3.07958,101.65062,,
+,Toyota Puchong - Unihub Auto,Puchong,Selangor,,,3.04183,101.619,,
+,Toyota Kajang 3S,Kajang,Selangor,,,2.98486,101.81438,,
+,Toyota Sungai Besi-MTR Automobile Corporation Sdn Bhd,Sungai Besi,Kuala Lumpur,,,3.11903,101.70885,,
+,Toyota Wheelcorp Old Klang Road,Kuala Lumpur,Kuala Lumpur,,,3.10808,101.67871,,
+,Toyota Kepong - Wheelcorp Sdn Bhd 3S,Kepong,Kuala Lumpur,,,3.21515,101.64679,,
+,Toyota Setapak 3S (Roda Express Auto Sdn Bhd),Setapak,Kuala Lumpur,,,3.19793,101.71449,,
+300,HLT Temerloh Sdn Bhd - Temerloh,Temerloh,Pahang,"Lot 20499, Batu 3, Jalan Temerloh-Mentakab, 28000 Temerloh, Pahang",28000,3.4506,102.4176,09 - 2777752 / 09 - 277 7784,nsofiaab@toyota.com.my
+301,Unihub Auto Sdn Bhd - Puchong,Puchong,Selangor,"No. 39, Jalan Meranti Jaya 11, Taman Industri Meranti Jaya, 47120 Puchong, Selangor",47120,3.0447,101.6162,03 - 8062 6633,luyeyauwn@toyota.com.my
+302,S&D Tama Malaysia Sdn Bhd - Prai,Prai,Pulau Pinang,"2415, Jalan Perusahaan, Kawasan Perusahaan Bebas Perai, 13600 Prai Butterworth, Penang",13600,5.3991,100.3638,04 - 390 7744,elysiatay@toyota.com.my
+305,Panglima City Motor Sdn Bhd - Telok Panglima Garang,Telok Panglima Garang,Selangor,"Lot 7159, Jalan Klang, Batu 8 42500 Telok Panglima Garang, Kuala Langat, Selangor",42500,2.9423,101.4707,03 - 3122 8028,shritharant@toyota.com.my
+306,Target Orion Corporation Sdn Bhd - Kuala Selangor,Kuala Selangor,Selangor,"Lot 675, Seksyen 1, Pekan Assam Jawa, 45000 Kuala Selangor, Selangor.",45000,3.3419,101.249,03 - 3289 6636,daniellr@toyota.com.my
+307,PCM Klang Motor Sdn Bhd - Sg Rasah,Sg Rasah,Selangor,"Lot 725, Jalan Sungai Rasah, Section 16, 40200 Shah Alam, Selangor",40200,3.0897,101.5453,03 - 5522 2999,nareshs@toyota.com.my
+308,S&D Tama Malaysia Sdn Bhd - Penang,Penang,Pulau Pinang,"Penang (Principal Correspondence): No. 8, Jalan Jelutong, 11600 Georgetown, Penang",11600,5.4261,100.3288,04 - 289 9199,khairil.hazmi@toyota.com.my
+310,HLT Temerloh Sdn Bhd - Kemaman,Kemaman,Terengganu,"Lot PT 28012, Kawasan Miel Jakar 3 Mukim Chukai 24000 Kemaman, Terengganu",24000,4.2305,103.426,09 - 859 9706,normankk@toyota.com.my
+311,"Crestmax Auto (Services) Sdn Bhd - Sg Penchala, KL","Sg Penchala, KL",Kuala Lumpur,"PT 8541, Jalan Sg. Penchala, Mukim Batu, 60000 Kuala Lumpur",60000,3.151,101.6869,03 - 7731 7292,rameshs@toyota.com.my
+312,Fadason Sdn Bhd - Bukit Mertajam,Bukit Mertajam,Pulau Pinang,"No. 86 & 88, Jalan Perda Timur, Bandar Perda, 14000 Bukit Mertajam, Penang",14000,5.363,100.4667,04 - 530 7006 / 04 - 538 7006,fatinsz@toyota.com.my
+313,Sirdi-333 Otomobil Sdn Bhd - Teluk Intan,Teluk Intan,Perak,"No. 1690, Jalan Sultan Abdullah, 36000 Teluk Intan, Perak",36000,4.0259,101.0213,05 - 622 9333,eugenehankw@toyota.com.my
+314,PCM Puchong Motor Sdn Bhd - Puchong,Puchong,Selangor,"No. 6, Jalan Perindustrian Puchong, Taman Perindustrian Puchong, Seksyen 3, 47160 Puchong, Selangor",47160,3.0167,101.6162,03 - 5623 6611 / 03 - 5623 6622,joshuatm@toyota.com.my
+315,Autoria Sdn Bhd - Ipoh,Ipoh,Perak,"No. 120, Jalan Sultan Nazrin Shah, 31350 Ipoh, Perak",31350,4.6095,101.0901,05 - 246 0238 / 05 - 253 6868,calvinlaft@toyota.com.my
+316,SP Selatan Otomobil Sdn Bhd - Sungai Petani,Sungai Petani,Kedah,"Lot 1365, Padang Temusu, Sungai Pasir, 08000 Sungai Petani, Kedah",08000,5.647,100.4877,04 - 431 1999 / 04 - 431 2799,shahrulrb@toyota.com.my
+317,Prima Pearl Auto Sdn Bhd - Jalan Ara,Jalan Ara,Pulau Pinang,"Lot 1099, Mukim 12, Daerah Barat Daya, Jalan Dato' Ismail Hashim, Sungai Ara, 11900 Bayan Lepas, Penang",11900,5.3062,100.2594,04 - 642 5689,muthumoney@toyota.com.my
+318,Kulim Topwheels Sdn Bhd - Kangar,Kangar,Perlis,"No. 565, Jalan Kangar-Alor Setar, 01000 Kangar, Perlis.",01000,6.438535157681725,100.19040483408587,04 - 976 3828,sunenpt@toyota.com.my
+319,Telagamas Motors Sdn Bhd - Tg Malim,Tg Malim,Perak,"Tg. Malim Lot 4594, Jalan Slim Baru, 35900 Tanjung Malim, Perak",35900,3.6841,101.5181,05 - 459 6888,alfredosl@toyota.com.my
+320,Distinctive Model Sdn Bhd - Sg Buloh,Sg Buloh,Selangor,"Lot 988, Jalan Subang, Kg. Baru Sg. Buloh, 47000 Sg. Buloh, Selangor",47000,3.209,101.558,03 - 6157 3339,kwanwc@toyota.com.my
+321,Hiewa Auto Gallery (Kulai) Sdn Bhd - Kulai,Kulai,Johor,"No. 1157, Jalan Kasturi 36/41, Bandar Indahpura 81000 Kulaijaya, Johor",81000,1.6561,103.6032,07 - 662 5501 / 07 - 662 5470,leel@toyota.com.my
+323,G-Mart Motor Sdn Bhd - Kg Melayu Subang,Kg Melayu Subang,Selangor,"Lot 3402, Bangunan G-Mart, Jalan Tembusu, Kg. Melayu Subang, 40150 Shah Alam, Selangor",40150,3.125,101.54,03 - 7846 8184 / 03 - 7846 8016,prabu.balasundaram@toyota.com.my
+325,MTR Automobile Corporation Sdn Bhd - Kajang,Kajang,Selangor,"Lot PT 68510, Jalan Semenyih, 43000 Kajang, Selangor",43000,2.9634,101.843,03 - 8733 1628,baharonis@toyota.com.my
+327,Fokus Tetap Sdn Bhd - Setia Alam,Setia Alam,Selangor,"Seksyen U13, No. 2A, Jln Setia Murni AH U13/AH, Setia Alam, 40170 Shah Alam, Selangor",40170,3.107,101.45,03 - 3344 9080,liewkhg@toyota.com.my
+328,Roda Express Auto Sdn Bhd - Jln Genting Kelang,Jln Genting Kelang,Kuala Lumpur,"Lot 9165, Batu 4, Jalan Genting Kelang, 53300 Kuala Lumpur",53300,3.206,101.725,03 - 4025 3888,limcb@toyota.com.my
+329,Wing Hin Automobile Sdn Bhd - Balakong,Balakong,Selangor,"Balakong (Principal Correspondence): Lot 9257A, Jalan Balakong, 43300 Balakong, Selangor",43300,3.0356,101.7543,03 - 8947 8333,daneswarank@toyota.com.my
+331,Hiewa Auto Gallery (Melaka) Sdn Bhd - Malacca,Malacca,Melaka,"No.7, Jalan TTC30, Taman Teknologi Cheng, 75250 Melaka",75250,2.1896,102.2501,06 - 3368411 / 06 - 3368410,henryyaphl@toyota.com.my
+332,Hiewa Auto Gallery (Larkin) Sdn Bhd - Johor Bahru,Johor Bahru,Johor,"No. 9, Jalan Gagah, Larkin Industrial Estate, 80350 Johor Bahru, Johor",80350,1.5047,103.7414,07 - 2376770 / 07 - 2353451,chinwhong@toyota.com.my
+333,Boulevard Motor (Labuan) Sdn Bhd - Labuan,Labuan,Labuan,"Lot 6, Car Showroom, 1KM,Jalan Tanjung Kubong, Kg Batu Arang Labuan 87020 Labuan, W.P.",87020,5.2831,115.2308,087 - 413 282,donovancl@toyota.com.my
+334,Saksama Otomobil Sdn Bhd - Johor Bahru,Johor Bahru,Johor,"PTD 136560, Jalan Skudai Lama, 81200 Johor Bahru, Johor",81200,1.4927,103.7574,07 - 232 8933,mohdhmkh@toyota.com.my
+335,E.S. Yang Motor Sdn Bhd - Muar,Muar,Johor,"No. 333, Jalan Dato' Haji Kosai, 84000 Muar, Johor",84000,2.0442,102.5689,06 - 955 6333,aaronyjw@toyota.com.my
+337,Hiewa Auto Gallery Sdn Bhd - Tebrau,Tebrau,Johor,"Tebrau (Principal Correspondence): No. 5, Jalan Persiaran Desa Tebrau, Taman Desa Tebrau, 81100 Johor Bahru, Johor",81100,1.4727,103.7414,07 - 353 7373,holikh@toyota.com.my
+338,Super Evergreen Automobile Sdn Bhd - Pontian,Pontian,Johor,"No. 36, Batu 35 1/2, Jalan Johor, 82000 Pontian, Johor",82000,1.4866,103.3896,07 - 686 0333,suresh.gobinathan@toyota.com.my
+31K,MM Hiewa Auto Gallery Sdn Bhd - Masai,Masai,Johor,"No.70, Jalan Mutiara 8, Kawasan Perindustrian Plentong, 81750 Masai, Johor",81750,1.4898,103.8842,07 - 357 5777,wongwsam@toyota.com.my
+340,PS Otomobil (M) Sdn Bhd - Segambut,Segambut,Kuala Lumpur,"No.50, Jalan Segambut Tengah, Segambut Utara, 51200 Segambut, Kuala Lumpur W.P.",51200,3.143944,101.702117,03 - 62576996,sangaran@toyota.com.my
+342,Syarikat Kelantan Motors Credit (M) Sdn Bhd - Kota Bharu,Kota Bharu,Kelantan,"Lot 1351, Autocity Tunjong, Jalan Salor - Pasir Mas, 15100 Kota Bharu, Kelantan",15100,6.137,102.2381,09 - 7476868 / 09 - 7446136,peterlewcl@toyota.com.my
+343,PCM Ipoh Motor Sdn Bhd - Ipoh,Ipoh,Perak,"Lot 4798, Jalan Kuala Kangsar, 30010 Ipoh, Perak",30010,4.5895,101.103956,05 - 506 0500,logansrauk@toyota.com.my
+344,G-Mart Taiping Motor Sdn Bhd - Taiping,Taiping,Perak,"Lot 5234-5235, Jalan Perusahaan Batu 2 1/2, Simpang, 34700 Taiping, Perak",34700,4.8519,100.7416,05 - 847 5992,mfirdausib@toyota.com.my
+345,Crestmax Auto (KB) Sdn Bhd - Kota Bahru,Kota Bharu,Kelantan,"Lot 155, Jalan Kuala Krai, Seksyen 22 15150 Kota Bharu, Kelantan",15150,6.117,102.251956,09 - 747 2225 / 09 - 747 0812,normalacom@toyota.com.my
+346,HLT Motors Sdn Bhd - Bentong,Bentong,Pahang,"Lot 1503, Chegar Medang Benus, Mukim Bentong, 28700 Bentong, Pahang.",28700,3.5222,101.9104,09 - 222 4288,siajosfin@toyota.com.my
+347,Crestmax Auto (KT) Sdn Bhd - Kuala Terengganu,Kuala Terengganu,Terengganu,"Lot 2153, Jalan Bukit Kecil, 21100 Kuala Terengganu, Terengganu",21100,5.3296,103.137,09 - 623 1562 / 09 - 623 1602 / 09 - 623 1432,sideka@toyota.com.my
+348,PDC Auto (Kuantan) Sdn Bhd - Kuantan,Kuantan,Pahang,"Lot 106948, Batu 3, Jalan Gambang-Kuantan,",25150,3.8197,103.326,09 - 536 5222,muhammadr@toyota.com.my
+350,Laser Motor Services Sdn Bhd - Taman Petaling Utama,Taman Petaling Utama,Selangor,"No 30E Jalan PJS 1/46 PJS 1 Taman Petaling Utama 46150 Petaling Jaya, Selangor",46150,3.078,101.645,03 - 7773 1818,nenyknk@toyota.com.my
+352,Syarikat Kalulong Sdn Bhd - Sibu,Sibu,Sarawak,"No.60, Jalan Upper Lanang, 96000 Sibu, Sarawak",96000,2.2993,111.8305,084 - 231 872,erictohyl@toyota.com.my
+353,Rimbunan Hijau Auto Services Sdn Bhd - Miri,Miri,Sarawak,"Lot 1596-1599 & 1604-1607, Eastwood Industrial Estate, Block 17, Kuala Baram Land District, 98000 Miri, Sarawak",98000,4.4115,113.9914,085 - 415 866,nguct@toyota.com.my
+354,Boulevard Jaya Sdn Bhd - Kuching,Kuching,Sarawak,"Lot 12648, Block 16, KCLD, Jalan Datuk Tawi Sli, 93250 Kuching, Sarawak",93250,1.5653,110.3592,082 - 593 889,lingbc@toyota.com.my
+356,Unitedstar Corporation Sdn Bhd - Nilai,Nilai,Negeri Sembilan,"Lot 19745 - Lot 19758 Jalan Nilai Perdana 7 Taman Nilai Perdana 71800 Nilai, Negeri Sembilan",71800,2.813,101.7982,06 - 799 0033,juliehm@toyota.com.my
+357,Laser Motor PJ Sdn Bhd - Section 19,Section 19,Selangor,"Section 19 (Principal Correspondence): No 1, Jalan 19/1, 46300 Petaling Jaya, Selangor Darul Ehsan",46300,3.1193,101.6067,03 - 7957 2666,erviner@toyota.com.my
+358,Fokus Sentral Sdn Bhd - Cheras,Cheras,Kuala Lumpur,"Lot 4523, Batu 5, Jalan Cheras 56100 Kuala Lumpur",56100,3.12282,101.698656,03 - 3344 9080 / 03 - 9132 7798,ericlpf@toyota.com.my
+359,Borneo Mobility (Sarawak) Sdn Bhd - Kuching,Kuching,Sarawak,"Lot 7142, Section 64, Jalan Pending 93450 Kuching, Sarawak",93450,1.5533,110.3752,082 - 336 743,tangkj@toyota.com.my
+360,Laser Motor 4S Sdn Bhd - Lombong Emas,Lombong Emas,Negeri Sembilan,"No. 2, Jalan Lombong Emas 5, Taman Industri Ringan (MPS), 70200 Seremban, Negeri Sembilan",70200,2.7378,101.9381,06-7643571 / 06-7643572 / 06-7643573,asnawi.nasir@toyota.com.my
+361,DMW 1 Automobile (Sabah) Sdn Bhd - Kudat,Kudat,Sabah,"Kudat (Principal Correspondence): 1/2 KM, Jalan Temanggong Kuarantud, 89058 Kudat, Sabah",89058,6.8837,116.8477,088 - 622 261,leesp@toyota.com.my
+362,Harapan Menang Sdn Bhd - Putatan,Putatan,Sabah,"Putatan (Principal Correspondence): Mile 7, Jalan Putatan, Putatan, 88200 Kota Kinabalu, Sabah.",88200,5.9924,116.0735,088 - 771 122 / 088 - 771 166,javierip@toyota.com.my
+363,Golden Tradeway Sdn Bhd - Keningau,Keningau,Sabah,"CL180648, Jalan Patikang Ulu 89008 Keningau, Sabah",89008,5.3378,116.1602,087 - 342 896,ricksonm@toyota.com.my
+364,Armada KK Automobile Sdn Bhd - Kota Kinabalu,Kota Kinabalu,Sabah,"Mile 6, Jalan Penampang, 88200 Penampang, Sabah.",88200,5.9804,116.0895,088-711 193 / 088-739 633,chiuws@toyota.com.my
+365,DMW 1 Automobile (Sabah) Sdn Bhd - Kota Belud,Kota Belud,Sabah,"Kota Belud KM 5, Kg. Pangkalan Abai, 89158 Kota Belud, Sabah",89158,6.351,116.4305,088 - 972 118,liewsl@toyota.com.my
+367,Laser Motor 4S Sdn Bhd - Jalan 217,Jalan 217,Selangor,"Lot 4, Jalan 51/217, Section 51, Off Jalan Templer 46050 Petaling Jaya, Selangor",46050,3.0993,101.620556,03 - 7783 6068,habibullahaj@toyota.com.my
+368,Super Evergreen (Batu Pahat) Sdn Bhd - Batu Pahat,Batu Pahat,Johor,"145, Jalan Rugayah, Bandar Penggaram Batu Pahat 83000 Johor",83000,1.8496,102.9325,07 - 436 7000 / 07 - 436 7002 / 07 - 436 7003,fauzee.kamsah@toyota.com.my
+369,Borneo Mobility (Sabah) Sdn Bhd - Kota Kinabalu,Kota Kinabalu,Sabah,"Mile 5 1/2, Tuaran Road 88450 Kota Kinabalu, Sabah",88450,5.9604,116.0735,088 - 422 337,jasonshimcy@toyota.com.my
+370,Boulevard Motor Sdn Bhd - Sibu,Sibu,Sarawak,"No. 2, Lane 61, Jalan Lanang, 96000 Sibu, Sarawak",96000,2.2713,111.8305,084 - 321 105,lohch@toyota.com.my
+31M,Hiewa Auto Gallery (M3) Sdn Bhd - Alor Gajah,Alor Gajah,Melaka,"426-430, Jalan Permai Utama, Taman Permai, Rembia, 78000 Alor Gajah, Melaka",78000,2.3804,102.2089,06 - 316 1336,yauhoeming@toyota.com.my
+373,ES Team Motor Sdn Bhd - Segamat,Segamat,Johor,"No.168, Kawasan Perindustrian Jalan Genuang, 85000 Segamat, Johor",85000,2.5148,102.8158,07 - 943 3388,wongkhw@toyota.com.my
+374,PCM Subang Motor Sdn Bhd - Subang,Subang,Selangor,"Lot 61716, Jalan SS 16/1 47500 Subang Jaya, Selangor",47500,3.0687,101.5851,03 - 5621 5566,tiresha@toyota.com.my
+375,Hiewa Auto Gallery Sdn Bhd - Kota Tinggi,Kota Tinggi,Johor,"No. 61 & 63, Jalan Baiduri, Taman Daiman Jaya, 81900 Kota Tinggi, Johor",81900,1.7381,103.8999,07 - 882 7373 / 07 - 882 6373,lauky@toyota.com.my
+376,Hong Huat Automobile Sdn Bhd - Kluang,Kluang,Johor,"PLO 16, Kawasan Perindustrian Mengkibol, 86000 Kluang, Johor",86000,2.0305,103.316,07 - 777 1502,nasfizan@toyota.com.my
+378,Boulevard Motor Sdn Bhd - Miri,Miri,Sarawak,"Lot 186, Block 5, MCLD Lorong 6, Jalan Krokop, 98000 Miri, Sarawak",98000,4.3835,113.9914,085 - 430 000,wongyh@toyota.com.my
+379,Boulevard Motor Sdn Bhd - Bintulu,Bintulu,Sarawak,"Lot 620, BDA Light, Industrial Estate, Jalan Sultan Iskandar, 97000 Bintulu, Sarawak",97000,3.1706,113.0414,086 - 334 472,markju@toyota.com.my
+380,MTR Automobile Corporation Sdn Bhd - Sg Besi,Sg Besi,Kuala Lumpur,"Sg. Besi (Principal Correspondence) Lot 312, Jalan Sungai Besi, 57100 Kuala Lumpur",57100,3.0827,101.7089,03 - 9222 3923,auhl@toyota.com.my
+381,Telagamas Motors Sdn Bhd - Kulim,Kulim,Kedah,"No. 92, Jalan Kempas 1/5, Taman Kempas Indah, 09000 Kulim, Kedah",09000,5.3647,100.5618,04 - 491 3366,nurulzm@toyota.com.my
+382,UMW Toyotsu Motors Sdn Bhd - Shah Alam,Shah Alam,Selangor,"Shah Alam (Principal Correspondence) No.2, Jalan Q15/Q, Section 15, 40200 Shah Alam, Selangor",40200,3.0738,101.5183,03 - 5513 6820,harivjn@toyota.com.my
+384,"PDC Automobile Sdn Bhd - Cheras, KL","Cheras, KL",Selangor,"Lot 58003, Batu 10 Kampung Baru Cheras 43200 Cheras, Selangor",43200,3.0906,101.742,03 - 9080 3272,nareshsis@toyota.com.my
+385,Fokus Auto (Sitiawan) Sdn Bhd - Sitiawan,Sitiawan,Perak,"Lot 22971, Jalan Lumut - Sitiawan, Seri Manjung, 32040 Sitiawan, Perak",32040,4.2018,100.6649,05 - 688 5055,chawcj@toyota.com.my
+386,Unitedstar Corporation Sdn Bhd - Taman Mayang,Taman Mayang,Selangor,"24 - 28, Jalan SS25/34, Mayang Industrial Park 47301 Petaling Jaya, Selangor",47301,3.0973,101.589379,03 - 7803 0182,russelsbk@toyota.com.my
+387,Fokus Timur Sdn Bhd - Kuantan,Kuantan,Pahang,"Lot 33025, Jalan Industri Semambu 11, Kawasan Perindustrian Semambu, 25350, Kuantan, Pahang",25350,3.7997,103.339856,03 - 3344 9080 / 09 - 566 1743 / 09 - 566 7957,norfarizaln@toyota.com.my
+388,"Motozoom Sdn Bhd - Wangsa Maju, KL","Wangsa Maju, KL",Kuala Lumpur,"No. 2, Jalan Wangsa Niaga 1, Off Jalan 2/27A, Wangsa Maju, 53300 Kuala Lumpur",53300,3.129292,101.679847,03 - 4143 3090,ongkheng@toyota.com.my
+390,Magna Viable Sdn Bhd - Bangi,Bangi,Selangor,"No. 12, Jalan P/15, Selaman Industrial Park, Seksyen 10, 43650 Bandar Baru Bangi, Selangor",43650,2.9734,101.7516,03 - 8925 6595,yonggu@toyota.com.my
+391,Boulevard Sandakan,Sandakan,Sabah,"Lot 077598102 Mile 3, North Road 90000 Sandakan, Sabah",90000,5.8394,118.1172,089 - 214 181,chiangym@toyota.com.my
+392,Wheelcorp Sdn Bhd - OKR,OKR,Kuala Lumpur,"Old Klang Road (Principal Correspondence) Lot 214, Batu Tiga, Jalan Klang Lama, 58000 Kuala Lumpur",58000,3.0878,101.6817,03 - 7982 9366,eugenetts@toyota.com.my
+393,Wing Hin Motor Sdn Bhd - Pandan Indah,Pandan Indah,Selangor,"Lot 63993, Off Jalan Pandan Indah, Kawasan Perindustrian Ringan, Ampang Baru Tambahan, 68000 Ampang, Selangor",68000,3.1328,101.752,03 - 4291 8333,ong.mingwah@toyota.com.my
+31J,"PCM Pandamaran Auto Sdn Bhd - Pandamaran, Klang","Pandamaran, Klang",Selangor,"PT 7420 Jalan Kim Chuan Pandamaran 42000 Klang, Selangor",42000,3.012,101.422,03-3162 5381,chuawh@toyota.com.my
+395,UMW Toyotsu Motors Sdn Bhd - Rawang,Rawang,Selangor,"Rawang: No. 1, Jalan Batu Arang, 48000 Rawang, Selangor",48000,3.3213,101.5767,03 - 6092 8252,zaileeip@toyota.com.my
+396,Boulevard Motor (Sabah) Sdn Bhd - Tawau,Tawau,Sabah,"TB 16342, Mile 1/4, Jalan Bahagia, 91000 Tawau, Sabah",91000,4.2448,117.8912,089 - 772 131,amrank@toyota.com.my
+397,Boulevard Motor (Sabah) Sdn Bhd - Lahad Datu,Lahad Datu,Sabah,"Lot 11 & 12, Kimbell Light Industrial Estate, Mile 3, North Road, 91100 Lahad Datu, Sabah",91100,5.0268,118.327,089 - 884792 / 089 - 881 304 / 089 - 881 882,roddyt@toyota.com.my
+398,Kulim Topwheels (Alor Setar) Sdn Bhd - Alor Setar,Alor Setar,Kedah,"No. B-4, Susuran Perusahaan 1, Off Persiaran Bandar Baru Mergong, Taman Bandar Baru Mergong, Lebuhraya Sultanah Bahiyah, 05150 Alor Setar, Kedah",05150,6.1088,100.3678,04 - 733 8313 / 04 - 733 8313 / 04 - 733 8066,hasanbsk@toyota.com.my
+399,Kulim Topwheels (Langkawi) Sdn Bhd - Langkawi,Langkawi,Kedah,"No. 20A, Jalan Bunga Raya, Bandar Kuah 07000 Langkawi, Kedah",07000,6.35,99.8,04 - 966 6555 / 04 - 966 1010,nurulan@toyota.com.my
+31A,PCM Semenyih Motor Sdn Bhd - Semenyih,Semenyih,Selangor,"No 2G, Jalan 5/8 Bandar Rinching Semenyih 43500, Selangor",43500,2.9354,101.843,03 - 8408 2111,chinshg@toyota.com.my
+31B,Hiewa Auto Gallery (M2) Sdn Bhd - Malacca 2,Malacca,Melaka,"No. 2A, Jalan Autocity 6 Persiaran Autocity 75450 Ayer Keroh, Melaka",75450,2.2655,102.2803,06 - 232 2254,-
+31C,Crestmax Auto (KB) Sdn Bhd - Gua Musang,Gua Musang,Kelantan,"PT 5191 & 5192, Jalan Kempas 1/8, Bandar Utama, 18300 Gua Musang, Kelantan.",18300,4.8823,101.9686,09 - 913 4719,mizreensab@toyota.com.my
+31L,MM Hiewa Auto Gallery (Medini) Sdn Bhd - Medini,Medini,Johor,"Lot R3, Anjung Neighbourhood Centre 5, Persiaran Ledang Height,79250 Iskandar Puteri, Johor",79250,1.432,103.63,07 - 509 8888,hayatiw@toyota.com.my
+31E,Super Evergreen (Nusajaya) Sdn Bhd - Nusajaya,Nusajaya,Johor,"No. 6, Jalan Silat Harimau 21, Taman Industri Jaya, 81300 Skudai, Johor.",81300,1.412,103.643856,07 - 562 2036,yeamwh@toyota.com.my
+31F,PS Otomobil (Selayang) Sdn Bhd - Selayang,Selayang,Selangor,"No. 6, Jalan Empat, Kawasan Perindustrian Selayang Baru, 68100 Selayang, Selangor",68100,3.2407,101.6637,03 - 6136 6900,vignesm@toyota.com.my
+31G,PCM Banting Motor Sdn Bhd - Banting,Banting,Selangor,"No 12, Jalan Suasa, Kawasan Perusahaan, 42700 Banting, Selangor.",42700,2.8136,101.5019,03-3187 8028,mfaizalm@toyota.com.my
+31H,Otomobil Sejahtera Sdn. Bhd - Cyberjaya,Cyberjaya,Selangor,"Lot 16, Jalan Autoville 2, Autoville, Jalan Persiaran Multimedia Cyber 10, 63000 Cyberjaya, Selangor.",63000,2.922,101.65,03-8320 9374 / 03-8320 4746,saifunn@toyota.com.my
+31N,Laser Motor NS Sdn. Bhd. - Bahau,Bahau,Negeri Sembilan,"No. 26, Pusat Perniagaan Angsana, Jalan Juasseh, 72100 Bahau, Negeri Sembilan",72100,2.8073,102.4048,06 - 454 2320 / 06 - 454 2184,haildawaty@toyota.com.my
+31P,Laser Motor NS Sdn. Bhd. - Senawang,Senawang,Negeri Sembilan,"Senawang (Principal Correspondence): No. 330 - 334, Taman Bukit Emas, Jalan Tampin, 70450 Seremban, Negeri Sembilan",70450,2.7178,101.951956,06 - 678 6633,ahmadsr@toyota.com.my
+31Q,S&D Tama Malaysia Sdn Bhd - Nibong Tebal,Nibong Tebal,Pulau Pinang,"3979, Jalan Perindustrian Nibong Tebal 3, Taman Perindustrian Nibong Tebal, 14300 Nibong Tebal, Pulau Pinang",14300,5.165,100.477,04-5958300,mmazwans@toyota.com.my
+31R,Wheelcorp Sdn Bhd - Kepong,Kepong,Kuala Lumpur,"No. 4, Jalan Metro Perdana Timur 5, Kepong Enterpreneur's Park, Batu 7, 52100 Kepong, Kuala Lumpur",52100,3.143944,101.671683,03 - 6259 2782,darylcmh@toyota.com.my
+31T,Best Auto Biz Sdn Bhd - Sri Aman,Sri Aman,Sarawak,"Lot 1204, Block 4, STD KM1, Jalan Seri Aman-Serian, 95000 Sri Aman, Sarawak",95000,1.2376,111.4621,083 - 326 332,yapcl@toyota.com.my
+31S,Best Auto Biz Sdn Bhd - Kuching,Kuching,Sarawak,"Lot 4645 Jalan Semariang, Petra Jaya, 93050 Kuching, Sarawak",93050,1.5333,110.3592,082 - 447 755,-
+31U,Borneo Mobility (Samarahan) Sdn Bhd - Kota Samarahan,Kota Samarahan,Sarawak,"No. 18, Uni Alam Commercial Centre, Jalan Datuk Mohamad Musa, 94300 , Kota Samarahan, Sarawak.",94300,1.4611,110.4312,082-659 528,chuamh@toyota.com.my
+31V,Panglima City Motor Sdn Bhd - Quayside Mall,Quayside Mall,Selangor,"B1-08, Quayside Mall, 25.7, Persiaran Freesia, 42500 Telok Panglima Garang, Selangor",42500,2.9143,101.4707,012 811 8256,balamurugana@toyota.com.my
+31W,Laser Motor 4S Sdn Bhd - Oakland,Oakland,Negeri Sembilan,"P.T No. 4958, Jalan Haruan 7, Oakland Industrial Park, 70300 Seremban, Negeri Sembilan.",70300,2.7158,101.920779,06-6338837 / 06-6338838 / 06-6338839,leeyyew@toyota.com.my
+31X,PCM Bangi Auto Sdn Bhd - Bangi,Bangi,Selangor,"28 & 30, Jalan P/8, Kawasan Perindustrian MIEL, 43650 Bangi, Selangor",43650,2.9454,101.7516,03-8912 5139,yonggu@toyota.com.my
+31Y,Hiewa Auto Gallery (PG) Sdn Bhd - Pasir Gudang,Pasir Gudang,Johor,"No 29, Jalan Ekoperniagaan 2, Taman Kota Masai, 81700 Pasir Gudang, Johor",81700,1.47,103.902,07-7729188,teohlk@toyota.com.my
+31Z,PS Otomobil (Batu Caves) Sdn Bhd - Batu Caves,Batu Caves,Selangor,"No.23, Jalan SBC 5, Taman Sri Btu Caves, 68100 Batu Caves, Selangor",68100,3.2379,101.684,03-61020999 / 03-60875999,shahirul.musa@toyota.com.my
+32B,Prima Pearl Auto Sdn Bhd - Bayan Lepas,Bayan Lepas,Pulau Pinang,"100, Solok Bayan Lepas Bayan Lepas Industrial Park Phase 4, 11900 Bayan Lepas, Pulau Pinang",11900,5.2782,100.2594,04-642 5689,muthumoney@toyota.com.my
+366,Harapan Menang Sdn Bhd - Beaufort,Beaufort,Sabah,"Jalan Haji Akhbar Khan, Kg Luagan, 89800 Beaufort, Sabah",89800,5.3473,115.7456,087-222 218,mruzzainni@toyota.com.my
+957,HIEWA AUTO GALLERY (LEXUS) SDN. BHD. - Mutiara Damansara,Mutiara Damansara,Selangor,"NO. 6, JALAN PJU 7/2, MUTIARA DAMANSARA, 47800 PETALING JAYA SELANGOR",47800,3.157,101.612,03 - 7710 5655,muwinthenm@lexus.com.my
+953,WING HIN AUTO CARRIAGE SDN BHD - Sg Besi,Sg Besi,Kuala Lumpur,"NO. 314, JALAN SUNGAI BESI, 57000 KUALA LUMPUR.",57000,3.0547,101.7089,03 - 9222 2268,chewcwe@lexus.com.my
+960,LEXUS PCM SG RASAH - Sg Rasah,Sg Rasah,Selangor,"Lot 725, Jalan Sungai Rasah, Seksyen 16, 40200 Shah Alam, Selangor",40200,3.0617,101.5453,012-875 3987,nareshs@toyota.com.my
+962,MM HIEWA AUTO GALLERY (LEXUS) SDN BHD - JB,JB,Johor,"LOT R3, ANJUNG NEIGHBOURHOOD CENTRE PERSIARAN LEDANG HEIGHT 79250 NUSAJAYA, JOHOR",79250,1.41,103.612679,07 - 509 8888,-
+954,BOULEVARD JAYA SDN BHD - Kuching,Kuching,Sarawak,"Lot 12648, Block 16, KCLD, Jalan Datuk Tawi Sli, 93250 Kuching, Sarawak",93250,1.5533,110.3472,082 - 466 188,taysw@lexus.com.my
+955,TELAGAMAS MOTORS SDN BHD - Ipoh,Ipoh,Perak,"NO. 91, JALAN TUNKU ABDUL RAHMAN, (JALAN KUALA KANGSAR), 30010, IPOH, PERAK.",30010,4.5875,101.072779,05 - 506 0000,sukumarvs@lexus.com.my
+951,TELAGAMAS MOTORS SDN BHD - Penang,Penang,Pulau Pinang,"N0. 26, JALAN SULTAN AHMAD SHAH 10500 GEORGETOWN, PULAU PINANG",10500,5.3981,100.3288,04-250 3888,credeance.chng@lexus.com.my
+961,BORNEO MOBILITY (SABAH) LEXUS - Kota Kinabalu,Kota Kinabalu,Sabah,"MILE 5.5, TUARAN ROAD, 88450 KOTA KINABALU, SABAH",88450,5.9804,116.0615,088 - 382 288,jasonshimcy@toyota.com.my
+963,LEXUS SUBANG JAYA - Subang,Subang,Selangor,"LOT 61716, JALAN SS 16/1, SS 16, 47500 SUBANG JAYA, SELANGOR",47500,3.0407,101.5851,03 - 5613 7909,tiresha@toyota.com.my
+964,LEXUS KOTA BHARU - Kelantan,Kelantan,Kelantan,"LOT 155, JALAN KUALA KRAI, SEKSYEN 22, 15150 KOTA BHARU, KELANTAN",15150,6.115,102.220779,09 - 747 8555,normalacom@toyota.com.my
+965,LEXUS KUANTAN - Kuantan,Kuantan,Pahang,"LOT 33025, JALAN PERINDUSTRIAN SEMAMBU II, KAWASAN PERINDUSTRIAN SEMAMBU, 25350 KUANTAN, PAHANG",25350,3.7977,103.308679,09 - 560 6226,norfarizaln@toyota.com.my
+966,LEXUS TEBRAU - Tebrau,Tebrau,Johor,"5, JALAN PERSIARAN DESA TEBRAU, TAMAN DESA TEBRAU, 81100 JOHOR BAHRU, JOHOR",81100,1.4927,103.7294,07 - 432 7373,holikh@toyota.com.my

@@ -13,8 +13,17 @@ from db import (
 )
 
 
+def clean_postcode(value):
+    if pd.isna(value):
+        return None
+    text = str(value).strip()
+    if text.endswith(".0"):
+        text = text[:-2]
+    return text or None
+
+
 def migrate_service(db):
-    df = ensure_latlon(load_csv("toyota_service_outlets.csv"))
+    df = ensure_latlon(load_csv("toyota_service_outlets.csv"), state_filter=None)
     if df.empty:
         log("No service outlets to migrate.")
         return
@@ -26,7 +35,7 @@ def migrate_service(db):
             address=r.get("address"),
             city=r.get("city"),
             state=r.get("state"),
-            postcode=str(r.get("postcode")) if pd.notna(r.get("postcode")) else None,
+            postcode=clean_postcode(r.get("postcode")),
             lat=float(r.get("lat")),
             lon=float(r.get("lon")),
             phone=r.get("phone"),
@@ -36,7 +45,7 @@ def migrate_service(db):
 
 
 def migrate_bp(db):
-    df = ensure_latlon(load_csv("toyota_bp_outlets.csv"))
+    df = ensure_latlon(load_csv("toyota_bp_outlets.csv"), state_filter=None)
     if df.empty:
         log("No BP outlets to migrate.")
         return
@@ -48,7 +57,7 @@ def migrate_bp(db):
             address=r.get("address"),
             city=r.get("city"),
             state=r.get("state"),
-            postcode=str(r.get("postcode")) if pd.notna(r.get("postcode")) else None,
+            postcode=clean_postcode(r.get("postcode")),
             lat=float(r.get("lat")),
             lon=float(r.get("lon")),
             phone=r.get("phone"),
@@ -58,7 +67,7 @@ def migrate_bp(db):
 
 
 def migrate_traffic(db):
-    df = ensure_latlon(load_csv("traffic_police_stations.csv"))
+    df = ensure_latlon(load_csv("traffic_police_stations.csv"), state_filter=None)
     if df.empty:
         log("No traffic stations to migrate.")
         return
@@ -70,7 +79,7 @@ def migrate_traffic(db):
             address=r.get("address"),
             city=r.get("city"),
             state=r.get("state"),
-            postcode=str(r.get("postcode")) if pd.notna(r.get("postcode")) else None,
+            postcode=clean_postcode(r.get("postcode")),
             lat=float(r.get("lat")),
             lon=float(r.get("lon")),
             phone=r.get("phone"),
@@ -84,7 +93,7 @@ def migrate_customers(db):
     if df.empty:
         log("No customers to migrate.")
         return
-    df = ensure_latlon(df)
+    df = ensure_latlon(df, state_filter=None)
     if "weight" not in df.columns:
         df["weight"] = 1.0
     log(f"Migrating {len(df)} customer cells...")
@@ -93,7 +102,7 @@ def migrate_customers(db):
         c = CustomerCell(
             state=r.get("state"),
             city=r.get("city"),
-            postcode=str(r.get("postcode")) if pd.notna(r.get("postcode")) else None,
+            postcode=clean_postcode(r.get("postcode")),
             lat=float(r.get("lat")),
             lon=float(r.get("lon")),
             weight=float(r.get("weight")),
@@ -110,7 +119,7 @@ def main():
         migrate_traffic(db)
         migrate_customers(db)
         db.commit()
-        log("✅ Migration complete.")
+        log("Migration complete.")
     finally:
         db.close()
 

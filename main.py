@@ -22,6 +22,7 @@ from db import (
 )
 from map_utils import (
     ensure_latlon,
+    get_admin1_feature,
     geocode_location_with_details,
     geocode_multiple_locations,
     filter_by_radius,
@@ -71,10 +72,10 @@ def search_filtered(
     Filter data by state, city, and/or postcode from the database.
     If a filter is not provided, all records for that level are returned.
     """
-    customers_base = ensure_latlon(_query_to_df(db.query(CustomerCell)))
-    service_base = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)))
-    bp_base = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)))
-    traffic_base = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)))
+    customers_base = ensure_latlon(_query_to_df(db.query(CustomerCell)), state_filter=None)
+    service_base = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)), state_filter=None)
+    bp_base = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)), state_filter=None)
+    traffic_base = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)), state_filter=None)
 
     def filter_df(df: pd.DataFrame, state_val: Optional[str], city_val: Optional[str], postcode_val: Optional[str]) -> pd.DataFrame:
         """Filter DataFrame by state, city, and postcode."""
@@ -135,11 +136,19 @@ def search_filtered(
             bounds_points.extend(df[["lat", "lon"]].dropna().values.tolist())
     
     boundary = None
+    if state:
+        state_feature = get_admin1_feature(state)
+        if state_feature:
+            boundary = {
+                "type": "polygon",
+                "feature": state_feature,
+            }
+
     if bounds_points:
         lats = [p[0] for p in bounds_points]
         lons = [p[1] for p in bounds_points]
         bounds = [[min(lats), min(lons)], [max(lats), max(lons)]]
-        boundary = {
+        boundary = boundary or {
             "type": "rectangle",
             "feature": rectangle_feature_from_bounds(
                 bounds,
@@ -347,7 +356,7 @@ def _build_boundary_payload(
 
 @app.get("/", response_class=HTMLResponse)
 def admin_home(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("admin_home.html", {"request": request})
+    return templates.TemplateResponse(request, "admin_home.html", {"request": request})
 
 
 @app.get("/interactive-map", response_class=HTMLResponse)
@@ -355,7 +364,7 @@ def interactive_map(request: Request) -> HTMLResponse:
     """
     Render the interactive Leaflet-based map with search UI.
     """
-    return templates.TemplateResponse("interactive_map.html", {"request": request})
+    return templates.TemplateResponse(request, "interactive_map.html", {"request": request})
 
 
 @app.get("/api/search")
@@ -382,10 +391,10 @@ def search_locations(
     else:
         radius_km = None
 
-    customers_base = ensure_latlon(_query_to_df(db.query(CustomerCell)))
-    service_base = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)))
-    bp_base = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)))
-    traffic_base = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)))
+    customers_base = ensure_latlon(_query_to_df(db.query(CustomerCell)), state_filter=None)
+    service_base = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)), state_filter=None)
+    bp_base = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)), state_filter=None)
+    traffic_base = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)), state_filter=None)
 
     def df_to_records(df: pd.DataFrame, layer_name: str):
         records: List[dict] = []
@@ -434,7 +443,11 @@ def search_locations(
         center_lat = geocode_result["lat"]
         center_lon = geocode_result["lon"]
         display_name = geocode_result.get("display_name", term_info["display_name"])
-        polygon_feature = extract_polygon_feature(geocode_result)
+        polygon_feature = (
+            get_admin1_feature(term_info["display_name"])
+            if search_type == "state"
+            else None
+        ) or extract_polygon_feature(geocode_result)
         admin_bounds = extract_bounding_box(geocode_result)
 
         if search_type == "state":
@@ -561,10 +574,10 @@ def search_multiple_locations(
         )
 
     # Load all database data
-    customers_df = ensure_latlon(_query_to_df(db.query(CustomerCell)))
-    service_df = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)))
-    bp_df = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)))
-    traffic_df = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)))
+    customers_df = ensure_latlon(_query_to_df(db.query(CustomerCell)), state_filter=None)
+    service_df = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)), state_filter=None)
+    bp_df = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)), state_filter=None)
+    traffic_df = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)), state_filter=None)
 
     # Filter by radius around ANY of the centers
     def filter_by_multiple_radius(df: pd.DataFrame, centers_list: list, radius: float):
@@ -627,6 +640,7 @@ def search_multiple_locations(
 def list_service_outlets(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     outlets = db.query(ToyotaServiceOutlet).order_by(ToyotaServiceOutlet.id).all()
     return templates.TemplateResponse(
+        request,
         "service_outlets.html",
         {"request": request, "outlets": outlets},
     )
@@ -670,7 +684,7 @@ def edit_service_outlet_form(
     if not outlet:
         raise HTTPException(status_code=404, detail="Service outlet not found")
     return templates.TemplateResponse(
-        "service_outlet_edit.html", {"request": request, "outlet": outlet}
+        request, "service_outlet_edit.html", {"request": request, "outlet": outlet}
     )
 
 
@@ -704,6 +718,7 @@ def update_service_outlet(
 def list_bp_outlets(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     outlets = db.query(ToyotaBPOutlet).order_by(ToyotaBPOutlet.id).all()
     return templates.TemplateResponse(
+        request,
         "bp_outlets.html",
         {"request": request, "outlets": outlets},
     )
@@ -747,6 +762,7 @@ def edit_bp_outlet_form(
     if not outlet:
         raise HTTPException(status_code=404, detail="Body & Paint outlet not found")
     return templates.TemplateResponse(
+        request,
         "bp_outlet_edit.html",
         {"request": request, "outlet": outlet},
     )
@@ -782,6 +798,7 @@ def update_bp_outlet(
 def list_traffic_stations(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     stations = db.query(TrafficPoliceStation).order_by(TrafficPoliceStation.id).all()
     return templates.TemplateResponse(
+        request,
         "traffic_stations.html",
         {"request": request, "stations": stations},
     )
@@ -825,6 +842,7 @@ def edit_traffic_station_form(
     if not station:
         raise HTTPException(status_code=404, detail="Traffic station not found")
     return templates.TemplateResponse(
+        request,
         "traffic_station_edit.html",
         {"request": request, "station": station},
     )
@@ -858,7 +876,7 @@ def update_traffic_station(
 
 @app.get("/admin/customers/upload", response_class=HTMLResponse)
 def upload_customers_form(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("customers_upload.html", {"request": request})
+    return templates.TemplateResponse(request, "customers_upload.html", {"request": request})
 
 
 @app.post("/admin/customers/upload")

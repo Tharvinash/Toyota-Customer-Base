@@ -144,23 +144,34 @@ block content %}
       pointer-events: auto;
     "
   >
-    <div style="font-weight: 600; margin-bottom: 6px">Legend</div>
-    <div style="line-height: 1.4; margin-bottom: 4px">
-      <div>
-        <i class="fa fa-wrench" style="color: blue"></i>&nbsp; Toyota Service
-        Outlets
+    <div class="legend-title">Legend</div>
+    <div class="legend-list">
+      <div class="legend-item">
+        <span class="legend-icon legend-icon-service">
+          <i class="fa fa-wrench" aria-hidden="true"></i>
+        </span>
+        <span>Toyota Service Outlets</span>
       </div>
-      <div>
-        <i class="fa fa-car" style="color: green"></i>&nbsp; Toyota Body &amp;
-        Paint
+      <div class="legend-item">
+        <span class="legend-icon legend-icon-bp">
+          <i class="fa fa-car" aria-hidden="true"></i>
+        </span>
+        <span>Toyota Body &amp; Paint</span>
       </div>
-      <div>
-        <i class="fa fa-road" style="color: red"></i>&nbsp; Traffic Police
-        Stations
+      <div class="legend-item">
+        <span class="legend-icon legend-icon-traffic">
+          <i class="fa fa-shield" aria-hidden="true"></i>
+        </span>
+        <span>Traffic Police Stations</span>
       </div>
     </div>
     <hr style="margin: 8px 0" />
-    <div style="font-weight: 600; margin-bottom: 4px">Customer Density</div>
+    <div class="legend-title legend-density-title">
+      <span class="legend-icon legend-icon-density">
+        <i class="fa fa-fire" aria-hidden="true"></i>
+      </span>
+      <span>Customer Density</span>
+    </div>
     <div id="density-legend-ranges" style="line-height: 1.4"></div>
   </div>
 </div>
@@ -178,6 +189,81 @@ block content %}
 />
 <style>
   /* Mobile responsive fixes for interactive map */
+  .legend-title {
+    align-items: center;
+    display: flex;
+    font-weight: 600;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .legend-density-title {
+    margin-bottom: 4px;
+  }
+  .legend-list {
+    display: grid;
+    gap: 6px;
+    line-height: 1.25;
+    margin-bottom: 4px;
+  }
+  .legend-item {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+  }
+  .legend-icon {
+    align-items: center;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+    color: #fff;
+    display: inline-flex;
+    flex: 0 0 24px;
+    font-size: 12px;
+    height: 24px;
+    justify-content: center;
+    width: 24px;
+  }
+  .legend-icon-service {
+    background: #0d6efd;
+  }
+  .legend-icon-bp {
+    background: #198754;
+  }
+  .legend-icon-traffic {
+    background: #dc3545;
+  }
+  .legend-icon-density {
+    background: #f46d43;
+    flex-basis: 22px;
+    font-size: 11px;
+    height: 22px;
+    width: 22px;
+  }
+  .map-point-icon {
+    align-items: center;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 2px 7px rgba(0, 0, 0, 0.35);
+    color: #fff;
+    display: flex;
+    font-size: 14px;
+    height: 30px;
+    justify-content: center;
+    width: 30px;
+  }
+  .map-point-icon-service {
+    background: #0d6efd;
+  }
+  .map-point-icon-bp {
+    background: #198754;
+  }
+  .map-point-icon-traffic {
+    background: #dc3545;
+  }
+  .leaflet-div-icon.location-symbol {
+    background: transparent;
+    border: 0;
+  }
   @media (max-width: 768px) {
     #map-container {
       height: calc(100vh - 180px) !important;
@@ -192,6 +278,11 @@ block content %}
     }
     #map-legend span {
       font-size: 11px !important;
+    }
+    #map-legend .legend-icon {
+      flex-basis: 22px !important;
+      height: 22px !important;
+      width: 22px !important;
     }
     .card-body {
       padding: 0.75rem !important;
@@ -415,6 +506,7 @@ block content %}
   function renderFilteredData(data) {
     // Similar to runSearch but without geocoding - reuse existing rendering logic
     const bounds = [];
+    let boundaryBoundsForFit = null;
     
     // Create heatmap from customer data
     const customers = data.customers || [];
@@ -503,7 +595,7 @@ block content %}
         }
         const latlng = [item.lat, item.lon];
         bounds.push(latlng);
-        const marker = L.circleMarker(latlng, style || {});
+        const marker = createLocationMarker(latlng, style);
         const props = { ...item };
         delete props.lat;
         delete props.lon;
@@ -534,20 +626,29 @@ block content %}
         interactive: false,
         style: {
           color: "#1890ff",
-          weight: 2,
+          weight: 3,
           fillColor: "#1890ff",
-          fillOpacity: 0.08,
+          fillOpacity: 0.05,
         },
       }).addTo(boundaryLayer);
-      const boundaryBounds = geoLayer.getBounds();
-      bounds.push([boundaryBounds.getSouth(), boundaryBounds.getWest()]);
-      bounds.push([boundaryBounds.getNorth(), boundaryBounds.getEast()]);
+      boundaryBoundsForFit = geoLayer.getBounds();
     }
     
     // Fit map to bounds
-    if (bounds.length > 0) {
+    if (boundaryBoundsForFit && boundaryBoundsForFit.isValid()) {
+      try {
+        map.setMaxBounds(boundaryBoundsForFit.pad(0.25));
+        map.fitBounds(boundaryBoundsForFit, { padding: [20, 20] });
+        setTimeout(() => map.invalidateSize(), 100);
+      } catch (e) {
+        console.warn("Error fitting boundary:", e);
+      }
+    } else if (bounds.length > 0) {
       try {
         const mapBounds = L.latLngBounds(bounds);
+        if (malaysiaBounds) {
+          map.setMaxBounds(malaysiaBounds);
+        }
         map.fitBounds(mapBounds, { padding: [20, 20] });
         setTimeout(() => map.invalidateSize(), 100);
       } catch (e) {
@@ -583,6 +684,9 @@ block content %}
     trafficLayer.clearLayers();
     boundaryLayer.clearLayers();
     
+    if (malaysiaBounds) {
+      map.setMaxBounds(malaysiaBounds);
+    }
     map.setView([4.5, 109.0], 6);
     setTimeout(() => map.invalidateSize(), 100);
   }
@@ -597,6 +701,7 @@ block content %}
     trafficLayer,
     boundaryLayer;
   let layerControl;
+  let malaysiaBounds;
 
   // Define marker styles globally so they're accessible everywhere
   const customerStyle = {
@@ -606,22 +711,16 @@ block content %}
     fillOpacity: 0.9,
   };
   const serviceStyle = {
-    radius: 7,
-    color: "blue",
-    fillColor: "blue",
-    fillOpacity: 0.9,
+    markerClass: "map-point-icon-service",
+    iconClass: "fa-wrench",
   };
   const bpStyle = {
-    radius: 7,
-    color: "green",
-    fillColor: "green",
-    fillOpacity: 0.9,
+    markerClass: "map-point-icon-bp",
+    iconClass: "fa-car",
   };
   const trafficStyle = {
-    radius: 7,
-    color: "red",
-    fillColor: "red",
-    fillOpacity: 0.9,
+    markerClass: "map-point-icon-traffic",
+    iconClass: "fa-shield",
   };
   const boundaryColors = [
     "#ff4d4f",
@@ -700,9 +799,10 @@ block content %}
         <div style="display:flex;align-items:center;margin:2px 0;">
           <span style="
             display:inline-block;
-            width:18px;
+            width:20px;
             height:12px;
             border:1px solid #666;
+            border-radius:3px;
             margin-right:8px;
             background:${bucket.color};
           "></span>
@@ -711,6 +811,24 @@ block content %}
       `
       )
       .join("");
+  }
+
+  function createLocationMarker(latlng, style) {
+    if (!style || !style.markerClass || !style.iconClass) {
+      return L.circleMarker(latlng, customerStyle);
+    }
+
+    return L.marker(latlng, {
+      icon: L.divIcon({
+        className: "location-symbol",
+        html: `<span class="map-point-icon ${style.markerClass}">
+          <i class="fa ${style.iconClass}" aria-hidden="true"></i>
+        </span>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        popupAnchor: [0, -16],
+      }),
+    });
   }
 
   // Wait for DOM to be fully loaded before initializing map
@@ -733,7 +851,7 @@ block content %}
     }
 
     // Malaysia bounds: [south_lat, west_lon], [north_lat, east_lon]
-    const malaysiaBounds = L.latLngBounds(
+    malaysiaBounds = L.latLngBounds(
       [0.85, 99.5], // Southwest corner
       [7.5, 119.5] // Northeast corner
     );
@@ -1101,7 +1219,7 @@ block content %}
 
           const latlng = [item.lat, item.lon];
           bounds.push(latlng);
-          const marker = L.circleMarker(latlng, style || {});
+          const marker = createLocationMarker(latlng, style);
           const props = { ...item };
           delete props.lat;
           delete props.lon;
