@@ -6,7 +6,7 @@ import json
 
 import pandas as pd
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -49,6 +49,14 @@ if static_dir.exists():
 @app.get("/health", response_class=HTMLResponse)
 def health() -> str:
     return "OK"
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> FileResponse:
+    return FileResponse(
+        BASE_DIR / "static" / "favicon.ico",
+        media_type="image/x-icon",
+    )
 
 
 @app.get("/api/master-data")
@@ -175,6 +183,67 @@ def search_filtered(
     }
 
 
+@app.get("/api/search-multi-state")
+def search_multi_state(
+    states: List[str] = Query(default=[], description="State names"),
+    db: Session = Depends(get_db),
+):
+    """
+    Filter data by multiple states only. City and postcode are intentionally
+    excluded so this endpoint can power the multi-state comparison tab.
+    """
+    raw_states: List[str] = []
+    for state_value in states:
+        raw_states.extend([part.strip() for part in state_value.split(",") if part.strip()])
+
+    canonical_states: List[str] = []
+    seen_states = set()
+    for state_value in raw_states:
+        canonical = normalize_state_name(state_value)
+        if not canonical:
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{state_value}' is not a recognized Malaysian state or federal territory.",
+            )
+        if canonical.lower() not in seen_states:
+            seen_states.add(canonical.lower())
+            canonical_states.append(canonical)
+
+    if not canonical_states:
+        raise HTTPException(status_code=400, detail="Please select at least one state.")
+
+    state_lowers = [state.lower() for state in canonical_states]
+
+    customers_base = ensure_latlon(_query_to_df(db.query(CustomerCell)), state_filter=None)
+    service_base = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)), state_filter=None)
+    bp_base = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)), state_filter=None)
+    traffic_base = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)), state_filter=None)
+
+    customers_df = _filter_df_by_states(customers_base, state_lowers)
+    service_df = _filter_df_by_states(service_base, state_lowers)
+    bp_df = _filter_df_by_states(bp_base, state_lowers)
+    traffic_df = _filter_df_by_states(traffic_base, state_lowers)
+
+    boundaries = []
+    missing_boundaries = []
+    for state_name in canonical_states:
+        feature = get_admin1_feature(state_name)
+        if feature:
+            boundaries.append({"type": "polygon", "feature": feature})
+        else:
+            missing_boundaries.append(state_name)
+
+    return {
+        "states": canonical_states,
+        "boundaries": boundaries,
+        "missing_boundaries": missing_boundaries,
+        "customers": _df_to_map_records(customers_df, "customers"),
+        "service": _df_to_map_records(service_df, "service"),
+        "bp": _df_to_map_records(bp_df, "bp"),
+        "traffic": _df_to_map_records(traffic_df, "traffic"),
+    }
+
+
 def _query_to_df(query) -> pd.DataFrame:
     rows = query.all()
     if not rows:
@@ -188,6 +257,34 @@ def _query_to_df(query) -> pd.DataFrame:
         for row in rows
     ]
     return pd.DataFrame.from_records(records)
+
+
+def _df_to_map_records(df: pd.DataFrame, layer_name: str) -> List[dict]:
+    records: List[dict] = []
+    if df.empty:
+        return records
+
+    for _, row in df.iterrows():
+        label = (
+            row.get("outlet_name")
+            or row.get("station_name")
+            or row.get("name")
+            or row.get("city")
+            or row.get("postcode")
+            or layer_name
+        )
+
+        rec = {
+            "lat": float(row["lat"]),
+            "lon": float(row["lon"]),
+            "label": str(label),
+        }
+
+        for col in ("address", "city", "state", "postcode", "phone", "email", "weight"):
+            if col in df.columns and pd.notna(row.get(col)):
+                rec[col] = row[col]
+        records.append(rec)
+    return records
 
 
 MAX_SEARCH_TERMS = 10

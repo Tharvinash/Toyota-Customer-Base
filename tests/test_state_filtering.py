@@ -11,7 +11,7 @@ from db import (
     ToyotaServiceOutlet,
     TrafficPoliceStation,
 )
-from main import search_filtered
+from main import search_filtered, search_multi_state
 from map_utils import get_admin1_feature, normalize_state_name
 
 
@@ -127,6 +127,29 @@ class StateFilteringTests(unittest.TestCase):
         self.assertEqual(
             sum(len(result[key]) for key in ("customers", "service", "bp", "traffic")),
             10,
+        )
+
+    def test_multi_state_search_combines_canonical_state_counts(self) -> None:
+        states = ["Pulau Pinang", "Kedah"]
+        result = search_multi_state(states=states, db=self.db)
+
+        self.assertEqual(result["states"], states)
+        self.assertEqual(len(result["boundaries"]), 2)
+
+        for model, response_key in MODEL_TO_RESPONSE_KEY:
+            expected_count = sum(
+                count_model_rows_for_state(self.db, model, state)
+                for state in states
+            )
+            self.assertEqual(len(result[response_key]), expected_count)
+
+        self.assertEqual(len(result["customers"]), 0)
+        self.assertEqual(len(result["service"]), 9)
+        self.assertEqual(len(result["bp"]), 7)
+        self.assertEqual(len(result["traffic"]), 8)
+        self.assertEqual(
+            sum(len(result[key]) for key in ("customers", "service", "bp", "traffic")),
+            24,
         )
 
 

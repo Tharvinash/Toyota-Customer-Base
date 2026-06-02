@@ -1,14 +1,20 @@
 {% extends "base.html" %} {% block title %}Interactive Map{% endblock %} {%
-block content %}
+block main_class %}container-fluid px-3{% endblock %} {% block content %}
 <style>
   /* Ensure navbar has proper spacing */
   .navbar {
     margin-bottom: 1.5rem !important;
   }
+  .map-workspace {
+    width: 100%;
+  }
+  .map-workspace .card {
+    width: 100%;
+  }
 
   /* Mobile-specific fixes for map visibility */
   @media (max-width: 768px) {
-    main.container {
+    main.container-fluid {
       padding-left: 0 !important;
       padding-right: 0 !important;
       max-width: 100% !important;
@@ -58,38 +64,101 @@ block content %}
   }
 </style>
 
-<div class="row mb-3">
-  <div class="col-md-12">
+<div class="map-workspace">
+<div class="row g-0 mb-3">
+  <div class="col-12">
     <div class="card">
       <div class="card-body">
+        <ul class="nav nav-tabs mb-3" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link active"
+              id="single-state-tab"
+              data-bs-toggle="tab"
+              data-bs-target="#single-state-panel"
+              type="button"
+              role="tab"
+            >
+              Single State Search
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              id="multi-state-tab"
+              data-bs-toggle="tab"
+              data-bs-target="#multi-state-panel"
+              type="button"
+              role="tab"
+            >
+              Multi-State View
+            </button>
+          </li>
+        </ul>
+
+        <div class="tab-content">
+          <div
+            class="tab-pane fade show active"
+            id="single-state-panel"
+            role="tabpanel"
+            aria-labelledby="single-state-tab"
+          >
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+              <select
+                id="filter-state"
+                class="form-select me-2"
+                style="min-width: 200px"
+              >
+                <option value="">-- All States --</option>
+              </select>
+              <select
+                id="filter-city"
+                class="form-select me-2"
+                style="min-width: 200px"
+                disabled
+              >
+                <option value="">-- All Cities --</option>
+              </select>
+              <select
+                id="filter-postcode"
+                class="form-select me-2"
+                style="min-width: 180px"
+                disabled
+              >
+                <option value="">-- All Postcodes --</option>
+              </select>
+              <button id="filter-search-btn" class="btn btn-primary me-2">Search</button>
+              <button id="filter-clear-btn" class="btn btn-outline-secondary me-2">
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div
+            class="tab-pane fade"
+            id="multi-state-panel"
+            role="tabpanel"
+            aria-labelledby="multi-state-tab"
+          >
+            <div class="d-flex flex-wrap gap-3 align-items-start mb-2">
+              <div
+                id="multi-state-checkboxes"
+                class="multi-state-checkbox-grid"
+                aria-label="Select states for multi-state view"
+              ></div>
+              <div class="d-flex flex-wrap gap-2 align-items-center">
+                <button id="multi-state-search-btn" class="btn btn-primary me-2">
+                  Search
+                </button>
+                <button id="multi-state-clear-btn" class="btn btn-outline-secondary me-2">
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-          <select
-            id="filter-state"
-            class="form-select me-2"
-            style="min-width: 200px"
-          >
-            <option value="">-- All States --</option>
-          </select>
-          <select
-            id="filter-city"
-            class="form-select me-2"
-            style="min-width: 200px"
-            disabled
-          >
-            <option value="">-- All Cities --</option>
-          </select>
-          <select
-            id="filter-postcode"
-            class="form-select me-2"
-            style="min-width: 180px"
-            disabled
-          >
-            <option value="">-- All Postcodes --</option>
-          </select>
-          <button id="filter-search-btn" class="btn btn-primary me-2">Search</button>
-          <button id="filter-clear-btn" class="btn btn-outline-secondary me-2">
-            Clear
-          </button>
           <button
             id="download-map-btn"
             class="btn btn-outline-primary me-2"
@@ -112,7 +181,7 @@ block content %}
         >
           <strong>Filter:</strong>
           <span id="filter-tips"
-            >Select a State to filter by location. If City or Postcode is not selected, all data for the selected State/City will be shown.</span
+            >Use Single State Search for City/Postcode filtering. Use Multi-State View to compare selected states only.</span
           >
         </div>
       </div>
@@ -124,10 +193,11 @@ block content %}
   id="map-container"
   style="
     position: relative;
-    height: 70vh;
+    height: calc(100vh - 245px);
     min-height: 400px;
     border-radius: 8px;
     overflow: hidden;
+    width: 100%;
   "
 >
   <div id="map" style="height: 100%; width: 100%"></div>
@@ -181,6 +251,7 @@ block content %}
     </div>
     <div id="density-legend-ranges" style="line-height: 1.4"></div>
   </div>
+</div>
 </div>
 
 <link
@@ -283,6 +354,33 @@ block content %}
     right: 14px !important;
     bottom: 14px !important;
   }
+  .multi-state-checkbox-grid {
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    display: grid;
+    gap: 8px 14px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    max-width: 720px;
+    min-width: min(100%, 320px);
+    padding: 10px 12px;
+    width: 100%;
+  }
+  .multi-state-checkbox-grid .form-check {
+    align-items: center;
+    display: flex;
+    margin: 0;
+    min-height: 24px;
+  }
+  .multi-state-checkbox-grid .form-check-input {
+    flex: 0 0 auto;
+    margin-top: 0;
+  }
+  .multi-state-checkbox-grid .form-check-label {
+    cursor: pointer;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+    padding-left: 0.35rem;
+  }
   @media (max-width: 768px) {
     #map-container {
       height: calc(100vh - 180px) !important;
@@ -348,6 +446,7 @@ block content %}
       if (!response.ok) throw new Error("Failed to load master data");
       masterData = await response.json();
       populateStateDropdown();
+      populateMultiStateSelect();
     } catch (error) {
       console.error("Error loading master data:", error);
       document.getElementById("filter-search-status").textContent = "Error loading filter data";
@@ -372,6 +471,34 @@ block content %}
     
     stateSelect.disabled = false;
     stateSelect.addEventListener("change", handleStateChange);
+  }
+
+  function populateMultiStateSelect() {
+    if (!masterData || !masterData.states) return;
+
+    const multiStateCheckboxes = document.getElementById("multi-state-checkboxes");
+    if (!multiStateCheckboxes) return;
+
+    multiStateCheckboxes.innerHTML = "";
+    masterData.states.forEach((state, index) => {
+      const checkWrap = document.createElement("div");
+      checkWrap.className = "form-check";
+
+      const checkbox = document.createElement("input");
+      checkbox.className = "form-check-input multi-state-checkbox";
+      checkbox.type = "checkbox";
+      checkbox.value = state.name;
+      checkbox.id = `multi-state-checkbox-${index}`;
+
+      const label = document.createElement("label");
+      label.className = "form-check-label";
+      label.htmlFor = checkbox.id;
+      label.textContent = state.name;
+
+      checkWrap.appendChild(checkbox);
+      checkWrap.appendChild(label);
+      multiStateCheckboxes.appendChild(checkWrap);
+    });
   }
 
   function handleStateChange() {
@@ -453,6 +580,19 @@ block content %}
     });
   }
 
+  function clearRenderedMap() {
+    if (!customersLayer || !customerCirclesLayer || !serviceLayer || !bpLayer || !trafficLayer || !boundaryLayer) {
+      return;
+    }
+    customersLayer.clearLayers();
+    customerCirclesLayer.clearLayers();
+    serviceLayer.clearLayers();
+    bpLayer.clearLayers();
+    trafficLayer.clearLayers();
+    boundaryLayer.clearLayers();
+    clearStateTileMask();
+  }
+
   // Filter search function
   async function runFilterSearch() {
     stateSelect = document.getElementById("filter-state");
@@ -502,13 +642,7 @@ block content %}
       
       const data = await resp.json();
       
-      // Clear all layers
-      customersLayer.clearLayers();
-      customerCirclesLayer.clearLayers();
-      serviceLayer.clearLayers();
-      bpLayer.clearLayers();
-      trafficLayer.clearLayers();
-      boundaryLayer.clearLayers();
+      clearRenderedMap();
       
       // Render data (reuse existing rendering functions)
       renderFilteredData(data);
@@ -525,6 +659,91 @@ block content %}
       statusEl.textContent = `Error: ${err.message || "Error contacting server"}`;
       statusEl.style.color = "#dc3545";
     }
+  }
+
+  async function runMultiStateSearch() {
+    const multiStateCheckboxes = document.getElementById("multi-state-checkboxes");
+    const statusEl = document.getElementById("filter-search-status");
+
+    if (!multiStateCheckboxes || !statusEl) {
+      console.error("Multi-state filter elements not found");
+      return;
+    }
+
+    const selectedStates = Array.from(
+      multiStateCheckboxes.querySelectorAll(".multi-state-checkbox:checked")
+    ).map(
+      (checkbox) => checkbox.value
+    );
+
+    if (!selectedStates.length) {
+      statusEl.textContent = "Please select at least one State.";
+      statusEl.style.color = "#dc3545";
+      return;
+    }
+
+    if (!map || !customersLayer || !serviceLayer || !bpLayer || !trafficLayer || !boundaryLayer) {
+      statusEl.textContent = "Map is still loading. Please wait...";
+      statusEl.style.color = "#dc3545";
+      setTimeout(() => runMultiStateSearch(), 500);
+      return;
+    }
+
+    statusEl.textContent = "Searching...";
+    statusEl.style.color = "#6c757d";
+
+    try {
+      const params = new URLSearchParams();
+      selectedStates.forEach((state) => params.append("states", state));
+
+      const resp = await fetch(`/api/search-multi-state?${params.toString()}`);
+      if (!resp.ok) {
+        const errorData = await resp.json();
+        statusEl.textContent = errorData.detail || "Error searching data";
+        statusEl.style.color = "#dc3545";
+        return;
+      }
+
+      const data = await resp.json();
+      clearRenderedMap();
+      renderFilteredData(data);
+
+      const totalResults =
+        (data.customers?.length || 0) +
+        (data.service?.length || 0) +
+        (data.bp?.length || 0) +
+        (data.traffic?.length || 0);
+      const stateLabel = (data.states || selectedStates).join(", ");
+      statusEl.textContent = `Showing ${selectedStates.length} state(s): ${stateLabel} | Found ${totalResults} result(s)`;
+      statusEl.style.color = "#28a745";
+      lastSearchLabel = selectedStates.join("-");
+      setDownloadButtonEnabled(true);
+    } catch (err) {
+      console.error("Multi-state search error:", err);
+      statusEl.textContent = `Error: ${err.message || "Error contacting server"}`;
+      statusEl.style.color = "#dc3545";
+    }
+  }
+
+  function clearMultiStateFilter() {
+    const multiStateCheckboxes = document.getElementById("multi-state-checkboxes");
+    const statusEl = document.getElementById("filter-search-status");
+
+    if (multiStateCheckboxes) {
+      multiStateCheckboxes.querySelectorAll(".multi-state-checkbox").forEach((checkbox) => {
+        checkbox.checked = false;
+      });
+    }
+    if (statusEl) {
+      statusEl.textContent = "";
+    }
+
+    clearRenderedMap();
+    lastSearchLabel = "";
+    setDownloadButtonEnabled(false);
+    setStateOnlyMapMode(false);
+    map.setView([4.5, 109.0], 6);
+    setTimeout(() => map.invalidateSize(), 100);
   }
 
   function renderFilteredData(data) {
@@ -648,10 +867,26 @@ block content %}
     addMarkers(data.bp || [], bpLayer, bpStyle);
     addMarkers(data.traffic || [], trafficLayer, trafficStyle);
     
+    const boundaryFeatures = [];
+    if (Array.isArray(data.boundaries)) {
+      data.boundaries.forEach((boundary) => {
+        if (boundary && boundary.feature) {
+          boundaryFeatures.push(boundary.feature);
+        }
+      });
+    } else if (data.boundary && data.boundary.feature) {
+      boundaryFeatures.push(data.boundary.feature);
+    }
+
     // Draw boundary if available
-    if (data.boundary && data.boundary.feature) {
-      renderStateTileMask(data.boundary.feature);
-      const geoLayer = L.geoJSON(data.boundary.feature, {
+    if (boundaryFeatures.length > 0) {
+      renderStateTileMask(boundaryFeatures);
+      const geoLayer = L.geoJSON(
+        {
+          type: "FeatureCollection",
+          features: boundaryFeatures,
+        },
+        {
         interactive: false,
         style: {
           color: "#1890ff",
@@ -703,12 +938,7 @@ block content %}
     lastSearchLabel = "";
     setDownloadButtonEnabled(false);
     
-    // Clear map
-    customersLayer.clearLayers();
-    serviceLayer.clearLayers();
-    bpLayer.clearLayers();
-    trafficLayer.clearLayers();
-    boundaryLayer.clearLayers();
+    clearRenderedMap();
     
     setStateOnlyMapMode(false);
     map.setView([4.5, 109.0], 6);
@@ -1011,13 +1241,18 @@ block content %}
       .map((ring) => ring.map((coord) => [coord[1], coord[0]]));
   }
 
-  function renderStateTileMask(feature) {
+  function renderStateTileMask(featureOrFeatures) {
     clearStateTileMask();
-    if (!stateTileMaskLayer || !feature) {
+    if (!stateTileMaskLayer || !featureOrFeatures) {
       return;
     }
 
-    const stateHoles = geoJsonExteriorRingsToLatLngs(feature);
+    const features = Array.isArray(featureOrFeatures)
+      ? featureOrFeatures
+      : [featureOrFeatures];
+    const stateHoles = features.flatMap((feature) =>
+      geoJsonExteriorRingsToLatLngs(feature)
+    );
     if (!stateHoles.length) {
       return;
     }
@@ -1071,6 +1306,8 @@ block content %}
     // Setup filter search button
     document.getElementById("filter-search-btn").addEventListener("click", runFilterSearch);
     document.getElementById("filter-clear-btn").addEventListener("click", clearFilter);
+    document.getElementById("multi-state-search-btn").addEventListener("click", runMultiStateSearch);
+    document.getElementById("multi-state-clear-btn").addEventListener("click", clearMultiStateFilter);
     document.getElementById("download-map-btn").addEventListener("click", downloadCurrentMapImage);
     // Ensure map container is visible
     const mapContainer = document.getElementById("map-container");
