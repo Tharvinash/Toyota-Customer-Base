@@ -159,7 +159,7 @@ def search_filtered(
                 "feature": state_feature,
             }
 
-    if bounds_points:
+    if bounds_points and (state or city or postcode):
         lats = [p[0] for p in bounds_points]
         lons = [p[1] for p in bounds_points]
         bounds = [[min(lats), min(lons)], [max(lats), max(lons)]]

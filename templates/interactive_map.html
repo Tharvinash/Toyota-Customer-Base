@@ -489,6 +489,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       checkbox.type = "checkbox";
       checkbox.value = state.name;
       checkbox.id = `multi-state-checkbox-${index}`;
+      checkbox.checked = true;
 
       const label = document.createElement("label");
       label.className = "form-check-label";
@@ -609,12 +610,6 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     const city = citySelect.value;
     const postcode = postcodeSelect.value;
     
-    if (!state) {
-      statusEl.textContent = "Please select a State.";
-      statusEl.style.color = "#dc3545";
-      return;
-    }
-    
     if (!map || !customersLayer || !serviceLayer || !bpLayer || !trafficLayer || !boundaryLayer) {
       statusEl.textContent = "Map is still loading. Please wait...";
       statusEl.style.color = "#dc3545";
@@ -626,7 +621,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     statusEl.style.color = "#6c757d";
     
     try {
-      const params = new URLSearchParams({ state });
+      const params = new URLSearchParams();
+      if (state) params.append("state", state);
       if (city) params.append("city", city);
       if (postcode) params.append("postcode", postcode);
       
@@ -649,9 +645,10 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       
       const totalResults = (data.customers?.length || 0) + (data.service?.length || 0) + 
                           (data.bp?.length || 0) + (data.traffic?.length || 0);
-      statusEl.textContent = `Found ${totalResults} result(s)${city ? ` in ${city}` : ""}${postcode ? `, postcode ${postcode}` : ""}`;
+      const scopeLabel = state || "all states";
+      statusEl.textContent = `Found ${totalResults} result(s) in ${scopeLabel}${city ? `, ${city}` : ""}${postcode ? `, postcode ${postcode}` : ""}`;
       statusEl.style.color = "#28a745";
-      lastSearchLabel = [state, city, postcode].filter(Boolean).join("-");
+      lastSearchLabel = [state || "all-states", city, postcode].filter(Boolean).join("-");
       setDownloadButtonEnabled(true);
       
     } catch (err) {
@@ -744,6 +741,61 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     setStateOnlyMapMode(false);
     map.setView([4.5, 109.0], 6);
     setTimeout(() => map.invalidateSize(), 100);
+  }
+
+  function resetMapDisplay() {
+    const statusEl = document.getElementById("filter-search-status");
+
+    if (statusEl) {
+      statusEl.textContent = "";
+    }
+    clearRenderedMap();
+    lastSearchLabel = "";
+    setDownloadButtonEnabled(false);
+    setStateOnlyMapMode(false);
+    if (map) {
+      map.setView([4.5, 109.0], 6);
+      setTimeout(() => map.invalidateSize(), 100);
+    }
+  }
+
+  function resetSingleStateControls() {
+    stateSelect = document.getElementById("filter-state");
+    citySelect = document.getElementById("filter-city");
+    postcodeSelect = document.getElementById("filter-postcode");
+
+    if (stateSelect) {
+      stateSelect.value = "";
+    }
+    if (citySelect) {
+      citySelect.innerHTML = '<option value="">-- All Cities --</option>';
+      citySelect.disabled = true;
+    }
+    if (postcodeSelect) {
+      postcodeSelect.innerHTML = '<option value="">-- All Postcodes --</option>';
+      postcodeSelect.disabled = true;
+    }
+  }
+
+  function resetMultiStateControls() {
+    const multiStateCheckboxes = document.getElementById("multi-state-checkboxes");
+
+    if (multiStateCheckboxes) {
+      multiStateCheckboxes.querySelectorAll(".multi-state-checkbox").forEach((checkbox) => {
+        checkbox.checked = true;
+      });
+    }
+  }
+
+  function resetMapForTabChange(event) {
+    const targetSelector = event?.target?.getAttribute("data-bs-target");
+
+    if (targetSelector === "#single-state-panel") {
+      resetSingleStateControls();
+    } else if (targetSelector === "#multi-state-panel") {
+      resetMultiStateControls();
+    }
+    resetMapDisplay();
   }
 
   function renderFilteredData(data) {
@@ -867,14 +919,25 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     addMarkers(data.bp || [], bpLayer, bpStyle);
     addMarkers(data.traffic || [], trafficLayer, trafficStyle);
     
+    const allMasterStatesCount = masterData?.states?.length || 0;
+    const isAllStatesMultiState =
+      Array.isArray(data.states) &&
+      allMasterStatesCount > 0 &&
+      data.states.length >= allMasterStatesCount;
+    const isUnfilteredAllStates =
+      !data.state &&
+      !data.city &&
+      !data.postcode &&
+      data.boundary?.type === "rectangle";
+    const shouldDrawBoundary = !isAllStatesMultiState && !isUnfilteredAllStates;
     const boundaryFeatures = [];
-    if (Array.isArray(data.boundaries)) {
+    if (shouldDrawBoundary && Array.isArray(data.boundaries)) {
       data.boundaries.forEach((boundary) => {
         if (boundary && boundary.feature) {
           boundaryFeatures.push(boundary.feature);
         }
       });
-    } else if (data.boundary && data.boundary.feature) {
+    } else if (shouldDrawBoundary && data.boundary && data.boundary.feature) {
       boundaryFeatures.push(data.boundary.feature);
     }
 
@@ -1309,6 +1372,9 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     document.getElementById("multi-state-search-btn").addEventListener("click", runMultiStateSearch);
     document.getElementById("multi-state-clear-btn").addEventListener("click", clearMultiStateFilter);
     document.getElementById("download-map-btn").addEventListener("click", downloadCurrentMapImage);
+    document.querySelectorAll('[data-bs-toggle="tab"]').forEach((tab) => {
+      tab.addEventListener("shown.bs.tab", resetMapForTabChange);
+    });
     // Ensure map container is visible
     const mapContainer = document.getElementById("map-container");
     const mapDiv = document.getElementById("map");
@@ -1393,6 +1459,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
         position: "topleft",
       })
       .addTo(map);
+
+    runFilterSearch();
 
     // Old search UI removed - using cascading dropdowns instead
   });
