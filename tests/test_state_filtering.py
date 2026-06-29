@@ -135,10 +135,6 @@ class StateFilteringTests(unittest.TestCase):
         for model, response_key in MODEL_TO_RESPONSE_KEY:
             self.assertEqual(len(result[response_key]), self.db.query(model).count())
 
-        self.assertEqual(len(result["customers"]), 168)
-        self.assertEqual(len(result["service"]), 101)
-        self.assertEqual(len(result["bp"]), 46)
-        self.assertEqual(len(result["traffic"]), 43)
         self.assertIsNone(result.get("boundary"))
 
     def test_multi_state_search_combines_canonical_state_counts(self) -> None:

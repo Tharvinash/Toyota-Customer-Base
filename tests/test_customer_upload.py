@@ -1,0 +1,198 @@
+from __future__ import annotations
+
+import asyncio
+from io import BytesIO
+import unittest
+
+import pandas as pd
+from starlette.datastructures import UploadFile
+from starlette.requests import Request
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from db import Base, CustomerCell
+from main import _customer_upload_summary, _prepare_customer_upload_rows
+from main import upload_customers_csv
+
+
+class CustomerUploadTests(unittest.TestCase):
+    def test_prepare_customer_upload_rows_normalizes_full_state_names_and_numbers(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "state": "Kuala Lumpur",
+                    "city": "Pandan Indah",
+                    "postcode": "55100",
+                    "lat": "3.133892",
+                    "lon": "101.7516751",
+                    "weight": "3,210",
+                },
+                {
+                    "state": "Selangor",
+                    "city": "Kajang",
+                    "postcode": "43000",
+                    "lat": "2.993518",
+                    "lon": "101.787407",
+                    "weight": "10449",
+                },
+            ]
+        )
+
+        rows, errors = _prepare_customer_upload_rows(df)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(rows[0]["state"], "Kuala Lumpur")
+        self.assertEqual(rows[0]["weight"], 3210.0)
+        self.assertEqual(rows[1]["state"], "Selangor")
+        self.assertEqual(rows[1]["weight"], 10449.0)
+
+        summary = _customer_upload_summary(previous_count=168, prepared_rows=rows)
+        self.assertEqual(summary["new_count"], 2)
+        self.assertEqual(summary["rows_replaced"], 168)
+        self.assertEqual(summary["states"], ["Kuala Lumpur", "Selangor"])
+        self.assertEqual(summary["total_weight_text"], "13,659")
+
+    def test_prepare_customer_upload_rows_rejects_state_codes(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "state": "KUL",
+                    "city": "Pandan Indah",
+                    "postcode": "55100",
+                    "lat": "3.133892",
+                    "lon": "101.7516751",
+                    "weight": "3210",
+                }
+            ]
+        )
+
+        rows, errors = _prepare_customer_upload_rows(df)
+
+        self.assertEqual(rows, [])
+        self.assertEqual(
+            errors,
+            [
+                "Line 2: state must be a full Malaysian state or federal "
+                "territory name, got 'KUL'."
+            ],
+        )
+
+    def test_prepare_customer_upload_rows_reports_line_level_errors(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "state": "Kuala Lumpur",
+                    "city": "Dang Wangi",
+                    "postcode": "50560",
+                    "lat": "Not",
+                    "lon": "Found",
+                    "weight": "675",
+                }
+            ]
+        )
+
+        rows, errors = _prepare_customer_upload_rows(df)
+
+        self.assertEqual(rows, [])
+        self.assertTrue(errors)
+        self.assertIn("Line 2: lat must be numeric", errors[0])
+
+    def test_prepare_customer_upload_rows_rejects_empty_csv(self) -> None:
+        df = pd.DataFrame(columns=["state", "city", "postcode", "lat", "lon", "weight"])
+
+        rows, errors = _prepare_customer_upload_rows(df)
+
+        self.assertEqual(rows, [])
+        self.assertEqual(errors, ["The CSV has no data rows."])
+
+
+class CustomerUploadPageTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=self.engine)
+        self.TestSessionLocal = sessionmaker(
+            autocommit=False,
+            autoflush=False,
+            bind=self.engine,
+        )
+        session = self.TestSessionLocal()
+        session.add(
+            CustomerCell(
+                state="Selangor",
+                city="Existing City",
+                postcode="40000",
+                lat=3.0,
+                lon=101.0,
+                weight=100.0,
+            )
+        )
+        session.commit()
+        session.close()
+
+    def _upload_csv(self, filename: str, csv: str):
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/admin/customers/upload",
+                "headers": [],
+            }
+        )
+        upload = UploadFile(filename=filename, file=BytesIO(csv.encode("utf-8")))
+        session = self.TestSessionLocal()
+        try:
+            return asyncio.run(upload_customers_csv(request, upload, session))
+        finally:
+            session.close()
+
+    def tearDown(self) -> None:
+        self.engine.dispose()
+
+    def test_upload_page_shows_line_level_error(self) -> None:
+        csv = (
+            "state,city,postcode,lat,lon,weight\n"
+            "Kuala Lumpur,Dang Wangi,50560,Not,Found,675\n"
+        )
+
+        response = self._upload_csv("bad.csv", csv)
+        html = response.body.decode("utf-8")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Upload failed.", html)
+        self.assertIn("No database changes were made.", html)
+        self.assertIn("Line 2: lat must be numeric", html)
+
+    def test_upload_page_shows_success_and_database_summary(self) -> None:
+        csv = (
+            "state,city,postcode,lat,lon,weight\n"
+            "Kuala Lumpur,Pandan Indah,55100,3.133892,101.7516751,\"3,210\"\n"
+            "Selangor,Kajang,43000,2.993518,101.787407,10449\n"
+        )
+
+        response = self._upload_csv("customers.csv", csv)
+        html = response.body.decode("utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Upload successful.", html)
+        self.assertIn("customers.csv uploaded successfully.", html)
+        self.assertIn("Database Update Summary", html)
+        self.assertIn("Previous customer rows", html)
+        self.assertIn("<td>1</td>", html)
+        self.assertIn("Rows replaced", html)
+        self.assertIn("New customer rows", html)
+        self.assertIn("<td>2</td>", html)
+        self.assertIn("States updated", html)
+        self.assertIn("2 - Kuala Lumpur, Selangor", html)
+        self.assertIn("Unique cities", html)
+        self.assertIn("Unique postcodes", html)
+        self.assertIn("Total customer density", html)
+        self.assertIn("13,659", html)
+
+
+if __name__ == "__main__":
+    unittest.main()

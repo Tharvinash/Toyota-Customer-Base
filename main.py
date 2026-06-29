@@ -982,7 +982,98 @@ def update_traffic_station(
 
 @app.get("/admin/customers/upload", response_class=HTMLResponse)
 def upload_customers_form(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "customers_upload.html", {"request": request})
+    return templates.TemplateResponse(
+        request,
+        "customers_upload.html",
+        {"request": request, "success": None, "error": None, "summary": None},
+    )
+
+
+def _clean_customer_upload_text(value: Any) -> str:
+    if pd.isna(value):
+        return ""
+    return str(value).strip()
+
+
+def _parse_customer_upload_float(value: Any, field_name: str, line_number: int) -> float:
+    text = _clean_customer_upload_text(value).replace(",", "")
+    if not text:
+        raise ValueError(f"Line {line_number}: {field_name} is required.")
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise ValueError(
+            f"Line {line_number}: {field_name} must be numeric, got {value!r}."
+        ) from exc
+
+
+def _normalize_customer_upload_state(value: Any, line_number: int) -> str:
+    text = _clean_customer_upload_text(value)
+    if not text:
+        raise ValueError(f"Line {line_number}: state is required.")
+    canonical = normalize_state_name(text)
+    if not canonical:
+        raise ValueError(
+            f"Line {line_number}: state must be a full Malaysian state or federal "
+            f"territory name, got {text!r}."
+        )
+    return canonical
+
+
+def _prepare_customer_upload_rows(df: pd.DataFrame) -> Tuple[List[dict], List[str]]:
+    required_cols = {"state", "city", "postcode", "lat", "lon", "weight"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        return [], [f"Missing columns in CSV: {', '.join(sorted(missing))}"]
+    if df.empty:
+        return [], ["The CSV has no data rows."]
+
+    prepared_rows: List[dict] = []
+    errors: List[str] = []
+
+    for idx, row in df.iterrows():
+        line_number = idx + 2
+        try:
+            state = _normalize_customer_upload_state(row.get("state"), line_number)
+            city = _clean_customer_upload_text(row.get("city"))
+            postcode = _clean_customer_upload_text(row.get("postcode"))
+            if not city:
+                raise ValueError(f"Line {line_number}: city is required.")
+            if not postcode:
+                raise ValueError(f"Line {line_number}: postcode is required.")
+
+            prepared_rows.append(
+                {
+                    "state": state,
+                    "city": city,
+                    "postcode": postcode,
+                    "lat": _parse_customer_upload_float(row.get("lat"), "lat", line_number),
+                    "lon": _parse_customer_upload_float(row.get("lon"), "lon", line_number),
+                    "weight": _parse_customer_upload_float(
+                        row.get("weight"), "weight", line_number
+                    ),
+                }
+            )
+        except ValueError as exc:
+            errors.append(str(exc))
+
+    return prepared_rows, errors
+
+
+def _customer_upload_summary(previous_count: int, prepared_rows: List[dict]) -> dict:
+    states = sorted({row["state"] for row in prepared_rows})
+    total_weight = sum(row["weight"] for row in prepared_rows)
+    return {
+        "previous_count": previous_count,
+        "new_count": len(prepared_rows),
+        "rows_replaced": previous_count,
+        "states": states,
+        "state_count": len(states),
+        "city_count": len({(row["state"], row["city"]) for row in prepared_rows}),
+        "postcode_count": len({row["postcode"] for row in prepared_rows}),
+        "total_weight": total_weight,
+        "total_weight_text": f"{total_weight:,.0f}",
+    }
 
 
 @app.post("/admin/customers/upload")
@@ -992,38 +1083,87 @@ async def upload_customers_csv(
     db: Session = Depends(get_db),
 ):
     if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Please upload a CSV file.")
-
-    content = await file.read()
-    df = pd.read_csv(pd.io.common.BytesIO(content))
-    df.columns = [c.strip().lower() for c in df.columns]
-
-    required_cols = {"state", "city", "postcode", "lat", "lon", "weight"}
-    missing = required_cols - set(df.columns)
-    if missing:
-        raise HTTPException(
+        return templates.TemplateResponse(
+            request,
+            "customers_upload.html",
+            {
+                "request": request,
+                "success": None,
+                "summary": None,
+                "error": {
+                    "message": "Please upload a CSV file.",
+                    "details": [],
+                },
+            },
             status_code=400,
-            detail=f"Missing columns in CSV: {', '.join(sorted(missing))}",
         )
 
-    # Clear existing customer_cells and replace with uploaded data
-    db.query(CustomerCell).delete()
-    db.commit()
+    content = await file.read()
+    try:
+        df = pd.read_csv(pd.io.common.BytesIO(content), dtype=str)
+    except Exception as exc:
+        return templates.TemplateResponse(
+            request,
+            "customers_upload.html",
+            {
+                "request": request,
+                "success": None,
+                "summary": None,
+                "error": {
+                    "message": "The CSV could not be read.",
+                    "details": [str(exc)],
+                },
+            },
+            status_code=400,
+        )
 
-    # Insert new rows
-    for _, row in df.iterrows():
+    df.columns = [c.strip().lower() for c in df.columns]
+    prepared_rows, errors = _prepare_customer_upload_rows(df)
+    if errors:
+        return templates.TemplateResponse(
+            request,
+            "customers_upload.html",
+            {
+                "request": request,
+                "success": None,
+                "summary": None,
+                "error": {
+                    "message": (
+                        "The CSV was not uploaded because some rows need to be fixed. "
+                        "No database changes were made."
+                    ),
+                    "details": errors[:20],
+                    "hidden_count": max(len(errors) - 20, 0),
+                },
+            },
+            status_code=400,
+        )
+
+    previous_count = db.query(CustomerCell).count()
+    db.query(CustomerCell).delete()
+
+    for row in prepared_rows:
         cell = CustomerCell(
-            state=row.get("state"),
-            city=row.get("city"),
-            postcode=str(row.get("postcode")) if pd.notna(row.get("postcode")) else None,
-            lat=float(row.get("lat")),
-            lon=float(row.get("lon")),
-            weight=float(row.get("weight")) if pd.notna(row.get("weight")) else None,
+            state=row["state"],
+            city=row["city"],
+            postcode=row["postcode"],
+            lat=row["lat"],
+            lon=row["lon"],
+            weight=row["weight"],
         )
         db.add(cell)
     db.commit()
 
-    return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "customers_upload.html",
+        {
+            "request": request,
+            "success": f"{file.filename} uploaded successfully.",
+            "error": None,
+            "summary": _customer_upload_summary(previous_count, prepared_rows),
+        },
+    )
 
 
 
