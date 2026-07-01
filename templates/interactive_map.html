@@ -859,9 +859,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       });
       
       bucketedPoints.forEach((pt) => {
-        const radius = pt.raw < 1000 ? 8 : pt.raw < 2000 ? 12 : 
-                      pt.raw < 3000 ? 16 : pt.raw < 4000 ? 20 : 
-                      pt.raw < 5000 ? 24 : 28;
+        const radius = getDensityRadius(pt.raw);
         
         const circle = L.circleMarker([pt.lat, pt.lon], {
           radius,
@@ -1053,11 +1051,16 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     "#2f54eb",
   ];
   const densityBuckets = [
-    { max: 1000, label: "< 1,000", color: "#2b83ba" },
-    { min: 1001, max: 2000, label: "1,001 – 2,000", color: "#80bfab" },
-    { min: 2001, max: 3000, label: "2,001 – 3,000", color: "#ffffbf" },
-    { min: 3001, max: 4000, label: "3,001 – 4,000", color: "#fdae61" },
-    { min: 4001, max: 5000, label: "4,001 – 5,000", color: "#f46d43" },
+    { max: 499.999999, label: "< 500", color: "#2b83ba" },
+    { min: 500, max: 1000, label: "500 - 1,000", color: "#56a6b4" },
+    { min: 1001, max: 1500, label: "1,001 - 1,500", color: "#80bfab" },
+    { min: 1501, max: 2000, label: "1,501 - 2,000", color: "#b7d88a" },
+    { min: 2001, max: 2500, label: "2,001 - 2,500", color: "#ffffbf" },
+    { min: 2501, max: 3000, label: "2,501 - 3,000", color: "#fee08b" },
+    { min: 3001, max: 3500, label: "3,001 - 3,500", color: "#fdae61" },
+    { min: 3501, max: 4000, label: "3,501 - 4,000", color: "#f98e52" },
+    { min: 4001, max: 4500, label: "4,001 - 4,500", color: "#f46d43" },
+    { min: 4501, max: 5000, label: "4,501 - 5,000", color: "#e84b36" },
     { min: 5001, label: "> 5,000", color: "#d7191c" },
   ];
   const MALAYSIAN_STATE_LOOKUP = {
@@ -1129,6 +1132,20 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       `
       )
       .join("");
+  }
+
+  function getDensityRadius(weight) {
+    if (weight < 500) return 8;
+    if (weight <= 1000) return 10;
+    if (weight <= 1500) return 12;
+    if (weight <= 2000) return 14;
+    if (weight <= 2500) return 16;
+    if (weight <= 3000) return 18;
+    if (weight <= 3500) return 20;
+    if (weight <= 4000) return 22;
+    if (weight <= 4500) return 24;
+    if (weight <= 5000) return 26;
+    return 28;
   }
 
   function escapeHtml(value) {
@@ -1701,18 +1718,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
         });
 
         bucketedPoints.forEach((pt) => {
-          const radius =
-            pt.raw < 1000
-              ? 8
-              : pt.raw < 2000
-              ? 12
-              : pt.raw < 3000
-              ? 16
-              : pt.raw < 4000
-              ? 20
-              : pt.raw < 5000
-              ? 24
-              : 28;
+          const radius = getDensityRadius(pt.raw);
 
           const circle = L.circleMarker([pt.lat, pt.lon], {
             radius,
