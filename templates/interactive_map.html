@@ -1512,6 +1512,119 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       .map((ring) => ring.map((coord) => [coord[1], coord[0]]));
   }
 
+  function geoJsonRingsByFeature(feature, featureIndex) {
+    const geometry = feature && feature.geometry;
+    if (!geometry || !geometry.coordinates) {
+      return [];
+    }
+
+    const polygons =
+      geometry.type === "Polygon"
+        ? [geometry.coordinates]
+        : geometry.type === "MultiPolygon"
+          ? geometry.coordinates
+          : [];
+
+    return polygons
+      .filter((polygon) => Array.isArray(polygon) && polygon.length > 0)
+      .map((polygon) => ({
+        featureIndex,
+        exterior: polygon[0].map((coord) => [coord[1], coord[0]]),
+        interiors: polygon
+          .slice(1)
+          .filter((ring) => Array.isArray(ring) && ring.length > 0)
+          .map((ring) => ring.map((coord) => [coord[1], coord[0]])),
+      }));
+  }
+
+  function getRingCenter(ring) {
+    const total = ring.reduce(
+      (acc, point) => {
+        acc.lat += point[0];
+        acc.lon += point[1];
+        return acc;
+      },
+      { lat: 0, lon: 0 }
+    );
+    return [total.lat / ring.length, total.lon / ring.length];
+  }
+
+  function getRingBounds(ring) {
+    return ring.reduce(
+      (bounds, point) => ({
+        south: Math.min(bounds.south, point[0]),
+        north: Math.max(bounds.north, point[0]),
+        west: Math.min(bounds.west, point[1]),
+        east: Math.max(bounds.east, point[1]),
+      }),
+      {
+        south: Infinity,
+        north: -Infinity,
+        west: Infinity,
+        east: -Infinity,
+      }
+    );
+  }
+
+  function getBoundsArea(bounds) {
+    return Math.max(bounds.north - bounds.south, 0) * Math.max(bounds.east - bounds.west, 0);
+  }
+
+  function getBoundsOverlapRatio(a, b) {
+    const south = Math.max(a.south, b.south);
+    const north = Math.min(a.north, b.north);
+    const west = Math.max(a.west, b.west);
+    const east = Math.min(a.east, b.east);
+    const overlapArea = getBoundsArea({ south, north, west, east });
+    const smallerArea = Math.min(getBoundsArea(a), getBoundsArea(b));
+    return smallerArea > 0 ? overlapArea / smallerArea : 0;
+  }
+
+  function isPointInsideRing(point, ring) {
+    const lat = point[0];
+    const lon = point[1];
+    let inside = false;
+
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const latI = ring[i][0];
+      const lonI = ring[i][1];
+      const latJ = ring[j][0];
+      const lonJ = ring[j][1];
+      const intersects =
+        lonI > lon !== lonJ > lon &&
+        lat < ((latJ - latI) * (lon - lonI)) / (lonJ - lonI) + latI;
+      if (intersects) inside = !inside;
+    }
+
+    return inside;
+  }
+
+  function isInteriorRingSelected(interiorRing, candidate) {
+    const interiorBounds = getRingBounds(interiorRing);
+    const candidateBounds = getRingBounds(candidate.exterior);
+    if (getBoundsOverlapRatio(interiorBounds, candidateBounds) > 0.65) {
+      return true;
+    }
+
+    const interiorCenter = getRingCenter(interiorRing);
+    const candidateCenter = getRingCenter(candidate.exterior);
+    return (
+      isPointInsideRing(interiorCenter, candidate.exterior) ||
+      isPointInsideRing(candidateCenter, interiorRing) ||
+      candidate.exterior.some((point) => isPointInsideRing(point, interiorRing))
+    );
+  }
+
+  function isNestedInsideSelectedRing(entry, allEntries) {
+    const center = getRingCenter(entry.exterior);
+    return allEntries.some(
+      (candidate) =>
+        candidate !== entry &&
+        candidate.featureIndex !== entry.featureIndex &&
+        isPointInsideRing(center, candidate.exterior)
+    );
+  }
+
   function renderStateTileMask(featureOrFeatures) {
     clearStateTileMask();
     if (!stateTileMaskLayer || !featureOrFeatures) {
@@ -1521,9 +1634,12 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     const features = Array.isArray(featureOrFeatures)
       ? featureOrFeatures
       : [featureOrFeatures];
-    const stateHoles = features.flatMap((feature) =>
-      geoJsonExteriorRingsToLatLngs(feature)
+    const featureRings = features.flatMap((feature, index) =>
+      geoJsonRingsByFeature(feature, index)
     );
+    const stateHoles = featureRings
+      .filter((entry) => !isNestedInsideSelectedRing(entry, featureRings))
+      .map((entry) => entry.exterior);
     if (!stateHoles.length) {
       return;
     }
@@ -1542,6 +1658,26 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       fillOpacity: 1,
       interactive: false,
     }).addTo(stateTileMaskLayer);
+
+    featureRings.forEach((entry) => {
+      entry.interiors.forEach((interiorRing) => {
+        const interiorIsSelected = featureRings.some(
+          (candidate) =>
+            candidate.featureIndex !== entry.featureIndex &&
+            isInteriorRingSelected(interiorRing, candidate)
+        );
+
+        if (!interiorIsSelected) {
+          L.polygon(interiorRing, {
+            pane: "stateMaskPane",
+            stroke: false,
+            fillColor: "#ffffff",
+            fillOpacity: 1,
+            interactive: false,
+          }).addTo(stateTileMaskLayer);
+        }
+      });
+    });
   }
 
   function setStateOnlyMapMode(enabled) {
