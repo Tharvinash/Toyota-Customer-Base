@@ -1183,10 +1183,15 @@ def update_traffic_station(
 
 @app.get("/admin/customers/upload", response_class=HTMLResponse)
 def upload_customers_form(request: Request) -> HTMLResponse:
+    return upload_csv_form(request)
+
+
+@app.get("/admin/upload-csv", response_class=HTMLResponse)
+def upload_csv_form(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "customers_upload.html",
-        {"request": request, "success": None, "error": None, "summary": None},
+        _upload_template_context(request),
     )
 
 
@@ -1229,6 +1234,152 @@ def _validate_customer_upload_coordinates(lat: float, lon: float, line_number: i
             f"Line {line_number}: lat/lon must be within Malaysia bounds "
             f"({south} to {north}, {west} to {east}), got {lat}, {lon}."
         )
+
+
+CSV_UPLOAD_CONFIGS: Dict[str, Dict[str, Any]] = {
+    "service_outlets": {
+        "label": "Service Outlets",
+        "model": ToyotaServiceOutlet,
+        "name_column": "outlet_name",
+        "required_columns": ["outlet_name", "city", "state", "postcode", "lat", "lon"],
+        "optional_columns": ["address", "phone", "email"],
+        "sample": {
+            "outlet_name": "Toyota Example Service Centre",
+            "address": "Lot 1, Jalan Example",
+            "city": "Shah Alam",
+            "state": "Selangor",
+            "postcode": "40000",
+            "lat": "3.0738",
+            "lon": "101.5183",
+            "phone": "03-1234 5678",
+            "email": "service@example.com",
+        },
+    },
+    "body_paint": {
+        "label": "Body and Paint",
+        "model": ToyotaBPOutlet,
+        "name_column": "outlet_name",
+        "required_columns": ["outlet_name", "city", "state", "postcode", "lat", "lon"],
+        "optional_columns": ["address", "phone", "email"],
+        "sample": {
+            "outlet_name": "Toyota Example Body & Paint",
+            "address": "Lot 2, Jalan Workshop",
+            "city": "Klang",
+            "state": "Selangor",
+            "postcode": "41000",
+            "lat": "3.0449",
+            "lon": "101.4456",
+            "phone": "03-2345 6789",
+            "email": "bp@example.com",
+        },
+    },
+    "non_dealer_workshops": {
+        "label": "Non-Dealer Workshops",
+        "model": NonDealerWorkshop,
+        "name_column": "outlet_name",
+        "required_columns": ["outlet_name", "city", "state", "postcode", "lat", "lon"],
+        "optional_columns": ["address", "phone", "email"],
+        "sample": {
+            "outlet_name": "Example Independent Workshop",
+            "address": "12, Jalan Industri",
+            "city": "Petaling Jaya",
+            "state": "Selangor",
+            "postcode": "46000",
+            "lat": "3.1073",
+            "lon": "101.6067",
+            "phone": "03-3456 7890",
+            "email": "workshop@example.com",
+        },
+    },
+    "competitor_bp": {
+        "label": "Competitor B&P",
+        "model": CompetitorBPOutlet,
+        "name_column": "outlet_name",
+        "required_columns": ["outlet_name", "city", "state", "postcode", "lat", "lon"],
+        "optional_columns": ["address", "phone", "email"],
+        "sample": {
+            "outlet_name": "Example Competitor Body & Paint",
+            "address": "8, Jalan Paint",
+            "city": "Kajang",
+            "state": "Selangor",
+            "postcode": "43000",
+            "lat": "2.9935",
+            "lon": "101.7874",
+            "phone": "03-4567 8901",
+            "email": "competitor@example.com",
+        },
+    },
+    "traffic_stations": {
+        "label": "Traffic Stations",
+        "model": TrafficPoliceStation,
+        "name_column": "station_name",
+        "required_columns": ["station_name", "city", "state", "postcode", "lat", "lon"],
+        "optional_columns": ["address", "phone", "email"],
+        "sample": {
+            "station_name": "Balai Polis Trafik Example",
+            "address": "Jalan Polis",
+            "city": "Kuala Lumpur",
+            "state": "Kuala Lumpur",
+            "postcode": "50560",
+            "lat": "3.1569",
+            "lon": "101.7020",
+            "phone": "03-5678 9012",
+            "email": "traffic@example.com",
+        },
+    },
+    "customer_density": {
+        "label": "Customer Density",
+        "model": CustomerCell,
+        "name_column": None,
+        "required_columns": ["state", "city", "postcode", "lat", "lon", "weight"],
+        "optional_columns": [],
+        "sample": {
+            "state": "Selangor",
+            "city": "Ampang",
+            "postcode": "68000",
+            "lat": "3.16648",
+            "lon": "101.748344",
+            "weight": "6265",
+        },
+    },
+}
+
+
+def _upload_config_views() -> List[Dict[str, Any]]:
+    views: List[Dict[str, Any]] = []
+    for key, config in CSV_UPLOAD_CONFIGS.items():
+        columns = [*config["required_columns"], *config["optional_columns"]]
+        views.append(
+            {
+                "key": key,
+                "label": config["label"],
+                "required_columns": config["required_columns"],
+                "optional_columns": config["optional_columns"],
+                "columns": columns,
+                "sample": config["sample"],
+                "sample_csv": ",".join(columns)
+                + "\n"
+                + ",".join(str(config["sample"].get(column, "")) for column in columns),
+            }
+        )
+    return views
+
+
+def _upload_template_context(
+    request: Request,
+    selected_dataset: str = "customer_density",
+    success: Optional[str] = None,
+    error: Optional[Dict[str, Any]] = None,
+    summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    return {
+        "request": request,
+        "upload_configs": _upload_config_views(),
+        "selected_dataset": selected_dataset,
+        "success": success,
+        "error": error,
+        "summary": summary,
+    }
 
 
 def _prepare_customer_upload_rows(df: pd.DataFrame) -> Tuple[List[dict], List[str]]:
@@ -1274,6 +1425,66 @@ def _prepare_customer_upload_rows(df: pd.DataFrame) -> Tuple[List[dict], List[st
     return prepared_rows, errors
 
 
+def _prepare_location_upload_rows(
+    df: pd.DataFrame,
+    config: Dict[str, Any],
+) -> Tuple[List[dict], List[str]]:
+    required_cols = set(config["required_columns"])
+    missing = required_cols - set(df.columns)
+    if missing:
+        return [], [f"Missing columns in CSV: {', '.join(sorted(missing))}"]
+    if df.empty:
+        return [], ["The CSV has no data rows."]
+
+    prepared_rows: List[dict] = []
+    errors: List[str] = []
+    name_column = config["name_column"]
+
+    for idx, row in df.iterrows():
+        line_number = idx + 2
+        try:
+            name = _clean_customer_upload_text(row.get(name_column))
+            state = _normalize_customer_upload_state(row.get("state"), line_number)
+            city = _clean_customer_upload_text(row.get("city"))
+            postcode = _clean_customer_upload_text(row.get("postcode"))
+            if not name:
+                raise ValueError(f"Line {line_number}: {name_column} is required.")
+            if not city:
+                raise ValueError(f"Line {line_number}: city is required.")
+            if not postcode:
+                raise ValueError(f"Line {line_number}: postcode is required.")
+            lat = _parse_customer_upload_float(row.get("lat"), "lat", line_number)
+            lon = _parse_customer_upload_float(row.get("lon"), "lon", line_number)
+            _validate_customer_upload_coordinates(lat, lon, line_number)
+
+            prepared_row = {
+                name_column: name,
+                "address": _clean_customer_upload_text(row.get("address")),
+                "city": city,
+                "state": state,
+                "postcode": postcode,
+                "lat": lat,
+                "lon": lon,
+                "phone": _clean_customer_upload_text(row.get("phone")),
+                "email": _clean_customer_upload_text(row.get("email")),
+            }
+            prepared_rows.append(prepared_row)
+        except ValueError as exc:
+            errors.append(str(exc))
+
+    return prepared_rows, errors
+
+
+def _prepare_csv_upload_rows(
+    df: pd.DataFrame,
+    dataset: str,
+) -> Tuple[List[dict], List[str]]:
+    if dataset == "customer_density":
+        return _prepare_customer_upload_rows(df)
+    config = CSV_UPLOAD_CONFIGS[dataset]
+    return _prepare_location_upload_rows(df, config)
+
+
 def _customer_upload_summary(previous_count: int, prepared_rows: List[dict]) -> dict:
     states = sorted({row["state"] for row in prepared_rows})
     total_weight = sum(row["weight"] for row in prepared_rows)
@@ -1290,25 +1501,73 @@ def _customer_upload_summary(previous_count: int, prepared_rows: List[dict]) -> 
     }
 
 
+def _csv_upload_summary(dataset: str, previous_count: int, prepared_rows: List[dict]) -> dict:
+    config = CSV_UPLOAD_CONFIGS[dataset]
+    summary = {
+        "dataset": dataset,
+        "dataset_label": config["label"],
+        "previous_count": previous_count,
+        "new_count": len(prepared_rows),
+        "rows_replaced": previous_count,
+        "states": sorted({row["state"] for row in prepared_rows if row.get("state")}),
+        "state_count": len({row["state"] for row in prepared_rows if row.get("state")}),
+        "city_count": len(
+            {(row.get("state"), row.get("city")) for row in prepared_rows if row.get("city")}
+        ),
+        "postcode_count": len({row["postcode"] for row in prepared_rows if row.get("postcode")}),
+        "changed_table": config["model"].__tablename__,
+    }
+    if dataset == "customer_density":
+        total_weight = sum(row["weight"] for row in prepared_rows)
+        summary["total_weight"] = total_weight
+        summary["total_weight_text"] = f"{total_weight:,.0f}"
+    return summary
+
+
 @app.post("/admin/customers/upload")
 async def upload_customers_csv(
     request: Request,
     file: UploadFile = File(...),
+    dataset: str = Form("customer_density"),
     db: Session = Depends(get_db),
 ):
+    return await upload_csv(request=request, file=file, dataset=dataset, db=db)
+
+
+@app.post("/admin/upload-csv")
+async def upload_csv(
+    request: Request,
+    file: UploadFile = File(...),
+    dataset: str = Form("customer_density"),
+    db: Session = Depends(get_db),
+):
+    if dataset not in CSV_UPLOAD_CONFIGS:
+        return templates.TemplateResponse(
+            request,
+            "customers_upload.html",
+            _upload_template_context(
+                request,
+                selected_dataset="customer_density",
+                error={
+                    "message": "Please choose a valid data type before uploading.",
+                    "details": [],
+                },
+            ),
+            status_code=400,
+        )
+
     if not file.filename.lower().endswith(".csv"):
         return templates.TemplateResponse(
             request,
             "customers_upload.html",
-            {
-                "request": request,
-                "success": None,
-                "summary": None,
-                "error": {
+            _upload_template_context(
+                request,
+                selected_dataset=dataset,
+                error={
                     "message": "Please upload a CSV file.",
                     "details": [],
                 },
-            },
+            ),
             status_code=400,
         )
 
@@ -1319,29 +1578,27 @@ async def upload_customers_csv(
         return templates.TemplateResponse(
             request,
             "customers_upload.html",
-            {
-                "request": request,
-                "success": None,
-                "summary": None,
-                "error": {
+            _upload_template_context(
+                request,
+                selected_dataset=dataset,
+                error={
                     "message": "The CSV could not be read.",
                     "details": [str(exc)],
                 },
-            },
+            ),
             status_code=400,
         )
 
     df.columns = [c.strip().lower() for c in df.columns]
-    prepared_rows, errors = _prepare_customer_upload_rows(df)
+    prepared_rows, errors = _prepare_csv_upload_rows(df, dataset)
     if errors:
         return templates.TemplateResponse(
             request,
             "customers_upload.html",
-            {
-                "request": request,
-                "success": None,
-                "summary": None,
-                "error": {
+            _upload_template_context(
+                request,
+                selected_dataset=dataset,
+                error={
                     "message": (
                         "The CSV was not uploaded because some rows need to be fixed. "
                         "No database changes were made."
@@ -1349,34 +1606,28 @@ async def upload_customers_csv(
                     "details": errors[:20],
                     "hidden_count": max(len(errors) - 20, 0),
                 },
-            },
+            ),
             status_code=400,
         )
 
-    previous_count = db.query(CustomerCell).count()
-    db.query(CustomerCell).delete()
+    config = CSV_UPLOAD_CONFIGS[dataset]
+    model = config["model"]
+    previous_count = db.query(model).count()
+    db.query(model).delete()
 
     for row in prepared_rows:
-        cell = CustomerCell(
-            state=row["state"],
-            city=row["city"],
-            postcode=row["postcode"],
-            lat=row["lat"],
-            lon=row["lon"],
-            weight=row["weight"],
-        )
-        db.add(cell)
+        db.add(model(**row))
     db.commit()
 
     return templates.TemplateResponse(
         request,
         "customers_upload.html",
-        {
-            "request": request,
-            "success": f"{file.filename} uploaded successfully.",
-            "error": None,
-            "summary": _customer_upload_summary(previous_count, prepared_rows),
-        },
+        _upload_template_context(
+            request,
+            selected_dataset=dataset,
+            success=f"{file.filename} uploaded successfully for {config['label']}.",
+            summary=_csv_upload_summary(dataset, previous_count, prepared_rows),
+        ),
     )
 
 

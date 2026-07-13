@@ -16,11 +16,13 @@ This project generates an interactive Folium map for Selangor, showing:
 pip install -r requirements.txt
 ```
 
-3. Run the migration script once to load existing CSV data into the DB:
+3. Ensure PostgreSQL is running and the local database exists:
 
-```bash
-python migrate_from_csv.py
+```text
+postgresql://postgres:<password>@localhost:5432/toyota_customer_base
 ```
+
+For a different database, set `DATABASE_URL` before starting the app.
 
 4. Start the FastAPI app:
 
@@ -32,17 +34,64 @@ uvicorn main:app --reload
 5. Open the admin dashboard:
 
 - Admin UI: `http://127.0.0.1:8000/`
-- Static Folium map: `http://127.0.0.1:8000/map`
 - Interactive search map: `http://127.0.0.1:8000/interactive-map`
 
-All CSV inputs, the generated `selangor_map.html`, and the default SQLite DB live under the `data/` folder (created automatically).
+Runtime map assets live under the `data/` folder. Uploaded business data is stored in PostgreSQL.
 
 ### Environment variables
 
 - `DATABASE_URL`: SQLAlchemy URL for the database.
-  - For local development, the default is `sqlite:///./data/selangor_map.db`.
+  - For local development, create a local `.env` with `DATABASE_URL`.
   - For production, use a managed PostgreSQL URL, e.g.:
     - `postgresql://user:password@host:5432/selangor_map`
+
+### Local PostgreSQL with Docker
+
+This repo includes a Docker Compose setup for a local PostgreSQL database.
+
+1. Copy the example environment file:
+
+```bash
+copy .env.example .env
+```
+
+2. Start PostgreSQL:
+
+```bash
+docker compose up -d postgres
+```
+
+3. Use this local database URL for the app:
+
+```bash
+postgresql://postgres:<password>@localhost:5432/toyota_customer_base
+```
+
+In PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn main:app --reload
+```
+
+4. Connect from DBeaver:
+
+- Host: `localhost`
+- Port: `5432`
+- Database: `toyota_customer_base`
+- Username: `postgres`
+- Password: use the value from your local `.env`
+
+To stop the database:
+
+```bash
+docker compose down
+```
+
+To delete the local PostgreSQL data volume and start fresh:
+
+```bash
+docker compose down -v
+```
 
 ### Deployment notes
 
@@ -52,3 +101,16 @@ All CSV inputs, the generated `selangor_map.html`, and the default SQLite DB liv
   - Provision a PostgreSQL instance.
   - Set `DATABASE_URL` in the environment.
   - Deploy the code and let the platform run the `web` process.
+
+### PostgreSQL migration
+
+Use `docs/postgres-migration-plan.md` for the cautious SQLite-to-PostgreSQL
+migration runbook. The key scripts are:
+
+```bash
+python scripts/export_db_csv_backup.py
+python scripts/migrate_sqlite_to_postgres.py --target-database-url "$POSTGRES_DATABASE_URL"
+```
+
+The old SQLite and source CSV files should remain in local `backups/` only. They
+are no longer runtime inputs after the PostgreSQL migration.

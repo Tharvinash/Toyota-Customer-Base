@@ -13,7 +13,6 @@ import time
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 STATE = "Selangor"
-OUTPUT_HTML = DATA_DIR / "selangor_map.html"
 ADMIN1_GEOJSON = DATA_DIR / "malaysia_admin1.geojson"
 
 # Approximate bounding box for Malaysia (Peninsular + East Malaysia)
@@ -128,19 +127,6 @@ def get_admin1_feature(state_name: str) -> Optional[Dict[str, Any]]:
     props["display_name"] = canonical
     props["source"] = "geoBoundaries ADM1"
     return state_feature
-
-
-# ----------------- DATA HELPERS -----------------
-def load_csv(name: str) -> pd.DataFrame:
-    path = DATA_DIR / name
-    if not path.exists():
-        log(f"{name} not found at {path}")
-        return pd.DataFrame()
-    log(f"Loading {name} ...")
-    df = pd.read_csv(path)
-    df.columns = [c.strip().lower() for c in df.columns]
-    log(f"{name} loaded: {len(df)} rows, columns={list(df.columns)}")
-    return df
 
 
 def ensure_latlon(df: pd.DataFrame, state_filter: str | None = STATE) -> pd.DataFrame:

@@ -1,16 +1,56 @@
 {% extends "base.html" %}
 
-{% block title %}Upload Customer CSV{% endblock %}
+{% block title %}Upload CSV{% endblock %}
 
 {% block content %}
-<div class="row">
-  <div class="col-lg-7">
-    <h2 class="mb-3">Upload Customer Base CSV</h2>
-    <p class="text-muted">
-      Upload a CSV with columns:
-      <code>state, city, postcode, lat, lon, weight</code>.
-      This will replace the existing customer heatmap cells.
-    </p>
+<style>
+  .upload-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  }
+  .upload-option {
+    border: 1px solid #d7dde4;
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 12px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .upload-option.is-active {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.14);
+  }
+  .upload-option input {
+    margin-right: 8px;
+  }
+  .sample-table {
+    font-size: 13px;
+  }
+  .sample-table th {
+    white-space: nowrap;
+  }
+  .sample-code {
+    background: #f8f9fa;
+    border: 1px solid #e3e6ea;
+    border-radius: 6px;
+    font-size: 12px;
+    max-height: 120px;
+    overflow: auto;
+    padding: 8px;
+    white-space: pre;
+  }
+</style>
+
+<div class="row justify-content-center">
+  <div class="col-xl-11">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        <h2 class="mb-2">Upload CSV</h2>
+        <p class="text-muted mb-0">
+          Choose a data type, upload the matching CSV, and the selected table will be replaced after validation.
+        </p>
+      </div>
+    </div>
 
     {% if success %}
       <div class="alert alert-success" role="alert">
@@ -41,7 +81,15 @@
           <table class="table table-sm mb-0">
             <tbody>
               <tr>
-                <th scope="row">Previous customer rows</th>
+                <th scope="row">Data type</th>
+                <td>{{ summary.dataset_label }}</td>
+              </tr>
+              <tr>
+                <th scope="row">Database table</th>
+                <td>{{ summary.changed_table }}</td>
+              </tr>
+              <tr>
+                <th scope="row">Previous rows</th>
                 <td>{{ summary.previous_count }}</td>
               </tr>
               <tr>
@@ -49,7 +97,7 @@
                 <td>{{ summary.rows_replaced }}</td>
               </tr>
               <tr>
-                <th scope="row">New customer rows</th>
+                <th scope="row">New rows</th>
                 <td>{{ summary.new_count }}</td>
               </tr>
               <tr>
@@ -64,43 +112,143 @@
                 <th scope="row">Unique postcodes</th>
                 <td>{{ summary.postcode_count }}</td>
               </tr>
-              <tr>
-                <th scope="row">Total customer density</th>
-                <td>{{ summary.total_weight_text }}</td>
-              </tr>
+              {% if summary.total_weight_text %}
+                <tr>
+                  <th scope="row">Total customer density</th>
+                  <td>{{ summary.total_weight_text }}</td>
+                </tr>
+              {% endif %}
             </tbody>
           </table>
         </div>
       </div>
     {% endif %}
 
-    <form method="post" enctype="multipart/form-data" id="customer-upload-form">
-      <div class="mb-3">
-        <label class="form-label">CSV File</label>
-        <input class="form-control" type="file" name="file" accept=".csv" required />
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <form method="post" action="/admin/upload-csv" enctype="multipart/form-data" id="csv-upload-form">
+          <div class="card mb-3">
+            <div class="card-header">Select Data Type</div>
+            <div class="card-body">
+              <div class="upload-grid">
+                {% for config in upload_configs %}
+                  <label
+                    class="upload-option{% if config.key == selected_dataset %} is-active{% endif %}"
+                    data-upload-option
+                    data-config-key="{{ config.key }}"
+                  >
+                    <input
+                      type="radio"
+                      name="dataset"
+                      value="{{ config.key }}"
+                      {% if config.key == selected_dataset %}checked{% endif %}
+                    />
+                    <strong>{{ config.label }}</strong>
+                    <div class="text-muted small mt-1">
+                      {{ config.required_columns | join(", ") }}
+                    </div>
+                  </label>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">Upload File</div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label class="form-label">CSV File</label>
+                <input class="form-control" type="file" name="file" accept=".csv" required />
+              </div>
+              <button class="btn btn-primary" type="submit" id="upload-submit-btn">
+                <span
+                  class="spinner-border spinner-border-sm me-2 d-none"
+                  aria-hidden="true"
+                  id="upload-spinner"
+                ></span>
+                <span id="upload-button-text">Upload CSV</span>
+              </button>
+              <span class="text-muted ms-2 d-none" id="upload-status">
+                Validating CSV and updating database...
+              </span>
+            </div>
+          </div>
+        </form>
       </div>
-      <button class="btn btn-primary" type="submit" id="upload-submit-btn">
-        <span
-          class="spinner-border spinner-border-sm me-2 d-none"
-          aria-hidden="true"
-          id="upload-spinner"
-        ></span>
-        <span id="upload-button-text">Upload</span>
-      </button>
-      <span class="text-muted ms-2 d-none" id="upload-status">
-        Uploading and updating database...
-      </span>
-    </form>
+
+      <div class="col-lg-5">
+        <div class="card">
+          <div class="card-header">CSV Format & Sample</div>
+          <div class="card-body">
+            {% for config in upload_configs %}
+              <div
+                class="sample-panel{% if config.key != selected_dataset %} d-none{% endif %}"
+                data-sample-panel="{{ config.key }}"
+              >
+                <h5 class="mb-2">{{ config.label }}</h5>
+                <div class="mb-2">
+                  <span class="badge text-bg-primary">Required</span>
+                  <span class="small">{{ config.required_columns | join(", ") }}</span>
+                </div>
+                {% if config.optional_columns %}
+                  <div class="mb-3">
+                    <span class="badge text-bg-secondary">Optional</span>
+                    <span class="small">{{ config.optional_columns | join(", ") }}</span>
+                  </div>
+                {% endif %}
+                <div class="table-responsive mb-3">
+                  <table class="table table-sm table-bordered sample-table mb-0">
+                    <thead>
+                      <tr>
+                        {% for column in config.columns %}
+                          <th>{{ column }}</th>
+                        {% endfor %}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        {% for column in config.columns %}
+                          <td>{{ config.sample[column] }}</td>
+                        {% endfor %}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="sample-code">{{ config.sample_csv }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
   document.addEventListener("DOMContentLoaded", () => {
-    const form = document.getElementById("customer-upload-form");
+    const form = document.getElementById("csv-upload-form");
     const button = document.getElementById("upload-submit-btn");
     const spinner = document.getElementById("upload-spinner");
     const buttonText = document.getElementById("upload-button-text");
     const status = document.getElementById("upload-status");
+    const options = Array.from(document.querySelectorAll("[data-upload-option]"));
+    const panels = Array.from(document.querySelectorAll("[data-sample-panel]"));
+
+    function activateDataset(dataset) {
+      options.forEach((option) => {
+        option.classList.toggle("is-active", option.dataset.configKey === dataset);
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle("d-none", panel.dataset.samplePanel !== dataset);
+      });
+    }
+
+    options.forEach((option) => {
+      option.addEventListener("click", () => {
+        const input = option.querySelector("input");
+        if (input) activateDataset(input.value);
+      });
+    });
 
     if (!form || !button || !spinner || !buttonText || !status) return;
 
@@ -113,5 +261,3 @@
   });
 </script>
 {% endblock %}
-
-

@@ -13,11 +13,13 @@ env/
 .DS_Store
 Thumbs.db
 *.log
+.env
 
 # Local data / generated files
 *.db
 *.sqlite
 *.sqlite3
+backups/
 
 # Jupyter (if you ever use it here)
 .ipynb_checkpoints/

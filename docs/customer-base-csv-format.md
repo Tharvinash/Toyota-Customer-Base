@@ -59,7 +59,8 @@ When a valid CSV is uploaded:
 4. The app inserts every row from the uploaded CSV into `customer_cells`.
 5. The interactive map uses the uploaded rows for customer density.
 
-Important: the upload updates the database table, not the `data/customers.csv` source file.
+Important: the upload updates the PostgreSQL database table directly. There is no
+runtime `data/customers.csv` source file after the PostgreSQL migration.
 
 ## Common Upload Errors
 

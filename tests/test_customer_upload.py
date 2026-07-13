@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import html as html_lib
 from io import BytesIO
 import unittest
 
@@ -11,8 +12,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from db import Base, CustomerCell
-from main import _customer_upload_summary, _prepare_customer_upload_rows
+from db import (
+    Base,
+    CompetitorBPOutlet,
+    CustomerCell,
+    NonDealerWorkshop,
+    ToyotaBPOutlet,
+    ToyotaServiceOutlet,
+    TrafficPoliceStation,
+)
+from main import _customer_upload_summary, _prepare_customer_upload_rows, CSV_UPLOAD_CONFIGS
 from main import upload_customers_csv
 
 
@@ -154,7 +163,7 @@ class CustomerUploadPageTests(unittest.TestCase):
         session.commit()
         session.close()
 
-    def _upload_csv(self, filename: str, csv: str):
+    def _upload_csv(self, filename: str, csv: str, dataset: str = "customer_density"):
         request = Request(
             {
                 "type": "http",
@@ -166,7 +175,7 @@ class CustomerUploadPageTests(unittest.TestCase):
         upload = UploadFile(filename=filename, file=BytesIO(csv.encode("utf-8")))
         session = self.TestSessionLocal()
         try:
-            return asyncio.run(upload_customers_csv(request, upload, session))
+            return asyncio.run(upload_customers_csv(request, upload, dataset, session))
         finally:
             session.close()
 
@@ -186,6 +195,7 @@ class CustomerUploadPageTests(unittest.TestCase):
         self.assertIn("Upload failed.", html)
         self.assertIn("No database changes were made.", html)
         self.assertIn("Line 2: lat must be numeric", html)
+        self.assertIn("Upload CSV", html)
 
     def test_upload_page_shows_success_and_database_summary(self) -> None:
         csv = (
@@ -199,12 +209,13 @@ class CustomerUploadPageTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("Upload successful.", html)
-        self.assertIn("customers.csv uploaded successfully.", html)
+        self.assertIn("customers.csv uploaded successfully for Customer Density.", html)
         self.assertIn("Database Update Summary", html)
-        self.assertIn("Previous customer rows", html)
+        self.assertIn("Customer Density", html)
+        self.assertIn("Previous rows", html)
         self.assertIn("<td>1</td>", html)
         self.assertIn("Rows replaced", html)
-        self.assertIn("New customer rows", html)
+        self.assertIn("New rows", html)
         self.assertIn("<td>2</td>", html)
         self.assertIn("States updated", html)
         self.assertIn("2 - Kuala Lumpur, Selangor", html)
@@ -212,6 +223,122 @@ class CustomerUploadPageTests(unittest.TestCase):
         self.assertIn("Unique postcodes", html)
         self.assertIn("Total customer density", html)
         self.assertIn("13,659", html)
+
+    def test_upload_page_replaces_service_outlets_and_shows_summary(self) -> None:
+        session = self.TestSessionLocal()
+        session.add(
+            ToyotaServiceOutlet(
+                outlet_name="Old Service",
+                city="Old City",
+                state="Selangor",
+                postcode="40000",
+                lat=3.0,
+                lon=101.0,
+            )
+        )
+        session.commit()
+        session.close()
+
+        csv = (
+            "outlet_name,address,city,state,postcode,lat,lon,phone,email\n"
+            "New Service Centre,Lot 1,Shah Alam,Selangor,40000,3.0738,101.5183,03-1234,\n"
+        )
+
+        response = self._upload_csv("service.csv", csv, "service_outlets")
+        html = response.body.decode("utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("service.csv uploaded successfully for Service Outlets.", html)
+        self.assertIn("toyota_service_outlets", html)
+        self.assertIn("Previous rows", html)
+        self.assertIn("<td>1</td>", html)
+
+        session = self.TestSessionLocal()
+        services = session.query(ToyotaServiceOutlet).all()
+        session.close()
+        self.assertEqual(len(services), 1)
+        self.assertEqual(services[0].outlet_name, "New Service Centre")
+
+    def test_upload_page_replaces_each_location_dataset_table(self) -> None:
+        cases = [
+            (
+                "body_paint",
+                ToyotaBPOutlet,
+                "outlet_name,address,city,state,postcode,lat,lon,phone,email\n"
+                "New BP,Lot 2,Klang,Selangor,41000,3.0449,101.4456,03-2345,\n",
+                "New BP",
+                "toyota_bp_outlets",
+            ),
+            (
+                "non_dealer_workshops",
+                NonDealerWorkshop,
+                "outlet_name,address,city,state,postcode,lat,lon,phone,email\n"
+                "Independent Workshop,Lot 3,Petaling Jaya,Selangor,46000,3.1073,101.6067,03-3456,\n",
+                "Independent Workshop",
+                "non_dealer_workshops",
+            ),
+            (
+                "competitor_bp",
+                CompetitorBPOutlet,
+                "outlet_name,address,city,state,postcode,lat,lon,phone,email\n"
+                "Competitor Paint,Lot 4,Kajang,Selangor,43000,2.9935,101.7874,03-4567,\n",
+                "Competitor Paint",
+                "competitor_bp_outlets",
+            ),
+            (
+                "traffic_stations",
+                TrafficPoliceStation,
+                "station_name,address,city,state,postcode,lat,lon,phone,email\n"
+                "Balai Trafik Test,Jalan Test,Kuala Lumpur,Kuala Lumpur,50560,3.1569,101.7020,03-5678,\n",
+                "Balai Trafik Test",
+                "traffic_police_stations",
+            ),
+        ]
+
+        for dataset, model, csv, expected_name, table_name in cases:
+            with self.subTest(dataset=dataset):
+                response = self._upload_csv(f"{dataset}.csv", csv, dataset)
+                html = response.body.decode("utf-8")
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(html_lib.escape(CSV_UPLOAD_CONFIGS[dataset]["label"]), html)
+                self.assertIn(table_name, html)
+
+                session = self.TestSessionLocal()
+                rows = session.query(model).all()
+                session.close()
+                self.assertEqual(len(rows), 1)
+                name_column = CSV_UPLOAD_CONFIGS[dataset]["name_column"]
+                self.assertEqual(getattr(rows[0], name_column), expected_name)
+
+    def test_upload_page_rejects_missing_required_location_column_without_db_changes(self) -> None:
+        csv = "city,state,postcode,lat,lon\nShah Alam,Selangor,40000,3.0738,101.5183\n"
+
+        response = self._upload_csv("missing-name.csv", csv, "service_outlets")
+        html = response.body.decode("utf-8")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Missing columns in CSV: outlet_name", html)
+        session = self.TestSessionLocal()
+        services = session.query(ToyotaServiceOutlet).all()
+        session.close()
+        self.assertEqual(services, [])
+
+    def test_upload_page_rejects_invalid_dataset_without_db_changes(self) -> None:
+        csv = (
+            "state,city,postcode,lat,lon,weight\n"
+            "Selangor,Ampang,68000,3.16648,101.748344,6265\n"
+        )
+
+        response = self._upload_csv("customers.csv", csv, "unknown_dataset")
+        html = response.body.decode("utf-8")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Please choose a valid data type before uploading.", html)
+        session = self.TestSessionLocal()
+        customers = session.query(CustomerCell).all()
+        session.close()
+        self.assertEqual(len(customers), 1)
 
 
 if __name__ == "__main__":
