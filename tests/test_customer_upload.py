@@ -106,6 +106,26 @@ class CustomerUploadTests(unittest.TestCase):
         self.assertEqual(rows, [])
         self.assertEqual(errors, ["The CSV has no data rows."])
 
+    def test_prepare_customer_upload_rows_rejects_coordinates_outside_malaysia(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "state": "Selangor",
+                    "city": "Tropicana",
+                    "postcode": "47410",
+                    "lat": "39.3523692",
+                    "lon": "-74.4445618",
+                    "weight": "580",
+                }
+            ]
+        )
+
+        rows, errors = _prepare_customer_upload_rows(df)
+
+        self.assertEqual(rows, [])
+        self.assertTrue(errors)
+        self.assertIn("Line 2: lat/lon must be within Malaysia bounds", errors[0])
+
 
 class CustomerUploadPageTests(unittest.TestCase):
     def setUp(self) -> None:

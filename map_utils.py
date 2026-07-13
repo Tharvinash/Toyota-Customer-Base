@@ -170,6 +170,16 @@ def ensure_latlon(df: pd.DataFrame, state_filter: str | None = STATE) -> pd.Data
     before_drop = len(df)
     df = df.dropna(subset=["lat", "lon"]).copy()
     log(f"Dropped rows missing coords: {before_drop} -> {len(df)} rows")
+
+    south, west = MALAYSIA_BOUNDS[0]
+    north, east = MALAYSIA_BOUNDS[1]
+    before_bounds = len(df)
+    df = df[
+        df["lat"].between(south, north)
+        & df["lon"].between(west, east)
+    ].copy()
+    if len(df) != before_bounds:
+        log(f"Dropped rows outside Malaysia bounds: {before_bounds} -> {len(df)} rows")
     return df
 
 

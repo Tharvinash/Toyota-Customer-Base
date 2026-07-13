@@ -5,7 +5,9 @@ import unittest
 from pathlib import Path
 
 from db import (
+    CompetitorBPOutlet,
     CustomerCell,
+    NonDealerWorkshop,
     SessionLocal,
     ToyotaBPOutlet,
     ToyotaServiceOutlet,
@@ -13,6 +15,7 @@ from db import (
 )
 from main import search_filtered, search_multi_state
 from map_utils import get_admin1_feature, normalize_state_name
+from map_utils import MALAYSIA_BOUNDS
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -22,6 +25,8 @@ MODEL_TO_RESPONSE_KEY = (
     (CustomerCell, "customers"),
     (ToyotaServiceOutlet, "service"),
     (ToyotaBPOutlet, "bp"),
+    (NonDealerWorkshop, "non_dealer"),
+    (CompetitorBPOutlet, "competitor_bp"),
     (TrafficPoliceStation, "traffic"),
 )
 
@@ -51,7 +56,23 @@ def canonical_state(value: str | None) -> str:
 
 def count_model_rows_for_state(db, model, canonical: str) -> int:
     rows = db.query(model).all()
-    return sum(1 for row in rows if canonical_state(row.state) == canonical.lower())
+    return sum(
+        1
+        for row in rows
+        if canonical_state(row.state) == canonical.lower() and has_valid_malaysia_coords(row)
+    )
+
+
+def has_valid_malaysia_coords(row) -> bool:
+    if row.lat is None or row.lon is None:
+        return False
+    south, west = MALAYSIA_BOUNDS[0]
+    north, east = MALAYSIA_BOUNDS[1]
+    return south <= float(row.lat) <= north and west <= float(row.lon) <= east
+
+
+def count_model_plotted_rows(db, model) -> int:
+    return sum(1 for row in db.query(model).all() if has_valid_malaysia_coords(row))
 
 
 def assert_search_counts_match_db(
@@ -123,9 +144,11 @@ class StateFilteringTests(unittest.TestCase):
         self.assertEqual(len(result["customers"]), 0)
         self.assertEqual(len(result["service"]), 5)
         self.assertEqual(len(result["bp"]), 3)
+        self.assertEqual(len(result["non_dealer"]), 0)
+        self.assertEqual(len(result["competitor_bp"]), 0)
         self.assertEqual(len(result["traffic"]), 2)
         self.assertEqual(
-            sum(len(result[key]) for key in ("customers", "service", "bp", "traffic")),
+            sum(len(result[key]) for _, key in MODEL_TO_RESPONSE_KEY),
             10,
         )
 
@@ -133,7 +156,7 @@ class StateFilteringTests(unittest.TestCase):
         result = search_filtered(state=None, city=None, postcode=None, db=self.db)
 
         for model, response_key in MODEL_TO_RESPONSE_KEY:
-            self.assertEqual(len(result[response_key]), self.db.query(model).count())
+            self.assertEqual(len(result[response_key]), count_model_plotted_rows(self.db, model))
 
         self.assertIsNone(result.get("boundary"))
 
@@ -154,9 +177,11 @@ class StateFilteringTests(unittest.TestCase):
         self.assertEqual(len(result["customers"]), 0)
         self.assertEqual(len(result["service"]), 9)
         self.assertEqual(len(result["bp"]), 7)
+        self.assertEqual(len(result["non_dealer"]), 0)
+        self.assertEqual(len(result["competitor_bp"]), 0)
         self.assertEqual(len(result["traffic"]), 8)
         self.assertEqual(
-            sum(len(result[key]) for key in ("customers", "service", "bp", "traffic")),
+            sum(len(result[key]) for _, key in MODEL_TO_RESPONSE_KEY),
             24,
         )
 

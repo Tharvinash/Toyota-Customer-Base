@@ -60,6 +60,36 @@ class ToyotaBPOutlet(Base):
     email = Column(String(255), nullable=True)
 
 
+class NonDealerWorkshop(Base):
+    __tablename__ = "non_dealer_workshops"
+
+    id = Column(Integer, primary_key=True, index=True)
+    outlet_name = Column(String(255), nullable=False)
+    address = Column(Text, nullable=True)
+    city = Column(String(100), nullable=True)
+    state = Column(String(100), nullable=True)
+    postcode = Column(String(20), nullable=True)
+    lat = Column(Float, nullable=True)
+    lon = Column(Float, nullable=True)
+    phone = Column(String(50), nullable=True)
+    email = Column(String(255), nullable=True)
+
+
+class CompetitorBPOutlet(Base):
+    __tablename__ = "competitor_bp_outlets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    outlet_name = Column(String(255), nullable=False)
+    address = Column(Text, nullable=True)
+    city = Column(String(100), nullable=True)
+    state = Column(String(100), nullable=True)
+    postcode = Column(String(20), nullable=True)
+    lat = Column(Float, nullable=True)
+    lon = Column(Float, nullable=True)
+    phone = Column(String(50), nullable=True)
+    email = Column(String(255), nullable=True)
+
+
 class TrafficPoliceStation(Base):
     __tablename__ = "traffic_police_stations"
 

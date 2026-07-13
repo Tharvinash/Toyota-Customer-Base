@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from db import (
+    CompetitorBPOutlet,
     CustomerCell,
+    NonDealerWorkshop,
     ToyotaBPOutlet,
     ToyotaServiceOutlet,
     TrafficPoliceStation,
@@ -21,6 +23,7 @@ from db import (
     init_db,
 )
 from map_utils import (
+    MALAYSIA_BOUNDS,
     ensure_latlon,
     get_admin1_feature,
     normalize_state_name,
@@ -84,6 +87,8 @@ def search_filtered(
     customers_base = ensure_latlon(_query_to_df(db.query(CustomerCell)), state_filter=None)
     service_base = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)), state_filter=None)
     bp_base = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)), state_filter=None)
+    non_dealer_base = ensure_latlon(_query_to_df(db.query(NonDealerWorkshop)), state_filter=None)
+    competitor_bp_base = ensure_latlon(_query_to_df(db.query(CompetitorBPOutlet)), state_filter=None)
     traffic_base = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)), state_filter=None)
 
     def filter_df(df: pd.DataFrame, state_val: Optional[str], city_val: Optional[str], postcode_val: Optional[str]) -> pd.DataFrame:
@@ -115,6 +120,8 @@ def search_filtered(
     customers_df = filter_df(customers_base, state, city, postcode)
     service_df = filter_df(service_base, state, city, postcode)
     bp_df = filter_df(bp_base, state, city, postcode)
+    non_dealer_df = filter_df(non_dealer_base, state, city, postcode)
+    competitor_bp_df = filter_df(competitor_bp_base, state, city, postcode)
     traffic_df = filter_df(traffic_base, state, city, postcode)
 
     def df_to_records(df: pd.DataFrame, layer_name: str):
@@ -146,7 +153,7 @@ def search_filtered(
 
     # Build bounds from all points
     bounds_points = []
-    for df in (customers_df, service_df, bp_df, traffic_df):
+    for df in (customers_df, service_df, bp_df, non_dealer_df, competitor_bp_df, traffic_df):
         if not df.empty and {"lat", "lon"}.issubset(df.columns):
             bounds_points.extend(df[["lat", "lon"]].dropna().values.tolist())
     
@@ -179,6 +186,8 @@ def search_filtered(
         "customers": df_to_records(customers_df, "customers"),
         "service": df_to_records(service_df, "service"),
         "bp": df_to_records(bp_df, "bp"),
+        "non_dealer": df_to_records(non_dealer_df, "non_dealer"),
+        "competitor_bp": df_to_records(competitor_bp_df, "competitor_bp"),
         "traffic": df_to_records(traffic_df, "traffic"),
     }
 
@@ -217,11 +226,15 @@ def search_multi_state(
     customers_base = ensure_latlon(_query_to_df(db.query(CustomerCell)), state_filter=None)
     service_base = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)), state_filter=None)
     bp_base = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)), state_filter=None)
+    non_dealer_base = ensure_latlon(_query_to_df(db.query(NonDealerWorkshop)), state_filter=None)
+    competitor_bp_base = ensure_latlon(_query_to_df(db.query(CompetitorBPOutlet)), state_filter=None)
     traffic_base = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)), state_filter=None)
 
     customers_df = _filter_df_by_states(customers_base, state_lowers)
     service_df = _filter_df_by_states(service_base, state_lowers)
     bp_df = _filter_df_by_states(bp_base, state_lowers)
+    non_dealer_df = _filter_df_by_states(non_dealer_base, state_lowers)
+    competitor_bp_df = _filter_df_by_states(competitor_bp_base, state_lowers)
     traffic_df = _filter_df_by_states(traffic_base, state_lowers)
 
     boundaries = []
@@ -240,6 +253,8 @@ def search_multi_state(
         "customers": _df_to_map_records(customers_df, "customers"),
         "service": _df_to_map_records(service_df, "service"),
         "bp": _df_to_map_records(bp_df, "bp"),
+        "non_dealer": _df_to_map_records(non_dealer_df, "non_dealer"),
+        "competitor_bp": _df_to_map_records(competitor_bp_df, "competitor_bp"),
         "traffic": _df_to_map_records(traffic_df, "traffic"),
     }
 
@@ -482,7 +497,7 @@ def search_locations(
 ):
     """
     Search by state, area/township, or postcode using online geocoding (OpenStreetMap).
-    Returns all nearby data: customers, service outlets, BP outlets, and traffic police stations.
+    Returns all nearby data: customers, outlet/workshop layers, and traffic police stations.
     """
     search_type = search_type.lower().strip()
     if search_type not in ["state", "area", "postcode"]:
@@ -500,6 +515,8 @@ def search_locations(
     customers_base = ensure_latlon(_query_to_df(db.query(CustomerCell)), state_filter=None)
     service_base = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)), state_filter=None)
     bp_base = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)), state_filter=None)
+    non_dealer_base = ensure_latlon(_query_to_df(db.query(NonDealerWorkshop)), state_filter=None)
+    competitor_bp_base = ensure_latlon(_query_to_df(db.query(CompetitorBPOutlet)), state_filter=None)
     traffic_base = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)), state_filter=None)
 
     def df_to_records(df: pd.DataFrame, layer_name: str):
@@ -533,6 +550,8 @@ def search_locations(
         "customers": [],
         "service": [],
         "bp": [],
+        "non_dealer": [],
+        "competitor_bp": [],
         "traffic": [],
     }
     seen_keys: Dict[str, set] = {key: set() for key in aggregated_records.keys()}
@@ -561,11 +580,15 @@ def search_locations(
             customers_df = _filter_df_by_states(customers_base, [state_lower])
             service_df = _filter_df_by_states(service_base, [state_lower])
             bp_df = _filter_df_by_states(bp_base, [state_lower])
+            non_dealer_df = _filter_df_by_states(non_dealer_base, [state_lower])
+            competitor_bp_df = _filter_df_by_states(competitor_bp_base, [state_lower])
             traffic_df = _filter_df_by_states(traffic_base, [state_lower])
         else:
             customers_df = filter_by_radius(customers_base, center_lat, center_lon, radius_km)
             service_df = filter_by_radius(service_base, center_lat, center_lon, radius_km)
             bp_df = filter_by_radius(bp_base, center_lat, center_lon, radius_km)
+            non_dealer_df = filter_by_radius(non_dealer_base, center_lat, center_lon, radius_km)
+            competitor_bp_df = filter_by_radius(competitor_bp_base, center_lat, center_lon, radius_km)
             traffic_df = filter_by_radius(traffic_base, center_lat, center_lon, radius_km)
 
         _append_unique_records(
@@ -584,13 +607,23 @@ def search_locations(
             df_to_records(bp_df, "bp"),
         )
         _append_unique_records(
+            aggregated_records["non_dealer"],
+            seen_keys["non_dealer"],
+            df_to_records(non_dealer_df, "non_dealer"),
+        )
+        _append_unique_records(
+            aggregated_records["competitor_bp"],
+            seen_keys["competitor_bp"],
+            df_to_records(competitor_bp_df, "competitor_bp"),
+        )
+        _append_unique_records(
             aggregated_records["traffic"],
             seen_keys["traffic"],
             df_to_records(traffic_df, "traffic"),
         )
 
         points: List[List[float]] = []
-        for df in (customers_df, service_df, bp_df, traffic_df):
+        for df in (customers_df, service_df, bp_df, non_dealer_df, competitor_bp_df, traffic_df):
             if not df.empty and {"lat", "lon"}.issubset(df.columns):
                 points.extend(df[["lat", "lon"]].dropna().values.tolist())
 
@@ -645,6 +678,8 @@ def search_locations(
         "customers": aggregated_records["customers"],
         "service": aggregated_records["service"],
         "bp": aggregated_records["bp"],
+        "non_dealer": aggregated_records["non_dealer"],
+        "competitor_bp": aggregated_records["competitor_bp"],
         "traffic": aggregated_records["traffic"],
     }
 
@@ -683,6 +718,8 @@ def search_multiple_locations(
     customers_df = ensure_latlon(_query_to_df(db.query(CustomerCell)), state_filter=None)
     service_df = ensure_latlon(_query_to_df(db.query(ToyotaServiceOutlet)), state_filter=None)
     bp_df = ensure_latlon(_query_to_df(db.query(ToyotaBPOutlet)), state_filter=None)
+    non_dealer_df = ensure_latlon(_query_to_df(db.query(NonDealerWorkshop)), state_filter=None)
+    competitor_bp_df = ensure_latlon(_query_to_df(db.query(CompetitorBPOutlet)), state_filter=None)
     traffic_df = ensure_latlon(_query_to_df(db.query(TrafficPoliceStation)), state_filter=None)
 
     # Filter by radius around ANY of the centers
@@ -702,6 +739,8 @@ def search_multiple_locations(
     customers_df = filter_by_multiple_radius(customers_df, centers, radius_km)
     service_df = filter_by_multiple_radius(service_df, centers, radius_km)
     bp_df = filter_by_multiple_radius(bp_df, centers, radius_km)
+    non_dealer_df = filter_by_multiple_radius(non_dealer_df, centers, radius_km)
+    competitor_bp_df = filter_by_multiple_radius(competitor_bp_df, centers, radius_km)
     traffic_df = filter_by_multiple_radius(traffic_df, centers, radius_km)
 
     def df_to_records(df: pd.DataFrame, layer_name: str):
@@ -738,6 +777,8 @@ def search_multiple_locations(
         "customers": df_to_records(customers_df, "customers"),
         "service": df_to_records(service_df, "service"),
         "bp": df_to_records(bp_df, "bp"),
+        "non_dealer": df_to_records(non_dealer_df, "non_dealer"),
+        "competitor_bp": df_to_records(competitor_bp_df, "competitor_bp"),
         "traffic": df_to_records(traffic_df, "traffic"),
     }
 
@@ -900,6 +941,166 @@ def update_bp_outlet(
     return RedirectResponse("/admin/bp-outlets", status_code=303)
 
 
+@app.get("/admin/non-dealer-workshops", response_class=HTMLResponse)
+def list_non_dealer_workshops(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    outlets = db.query(NonDealerWorkshop).order_by(NonDealerWorkshop.id).all()
+    return templates.TemplateResponse(
+        request,
+        "non_dealer_workshops.html",
+        {"request": request, "outlets": outlets},
+    )
+
+
+@app.post("/admin/non-dealer-workshops")
+def create_non_dealer_workshop(
+    request: Request,
+    outlet_name: str = Form(...),
+    address: str = Form(""),
+    city: str = Form(""),
+    state: str = Form(""),
+    postcode: str = Form(""),
+    lat: float | None = Form(None),
+    lon: float | None = Form(None),
+    phone: str = Form(""),
+    email: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    outlet = NonDealerWorkshop(
+        outlet_name=outlet_name,
+        address=address,
+        city=city,
+        state=state,
+        postcode=postcode,
+        lat=lat,
+        lon=lon,
+        phone=phone,
+        email=email,
+    )
+    db.add(outlet)
+    db.commit()
+    return RedirectResponse("/admin/non-dealer-workshops", status_code=303)
+
+
+@app.get("/admin/non-dealer-workshops/{outlet_id}/edit", response_class=HTMLResponse)
+def edit_non_dealer_workshop_form(
+    outlet_id: int, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    outlet = db.get(NonDealerWorkshop, outlet_id)
+    if not outlet:
+        raise HTTPException(status_code=404, detail="Non-dealer workshop not found")
+    return templates.TemplateResponse(
+        request,
+        "non_dealer_workshop_edit.html",
+        {"request": request, "outlet": outlet},
+    )
+
+
+@app.post("/admin/non-dealer-workshops/{outlet_id}/edit")
+def update_non_dealer_workshop(
+    outlet_id: int,
+    request: Request,
+    outlet_name: str = Form(...),
+    city: str = Form(""),
+    state: str = Form(""),
+    postcode: str = Form(""),
+    lat: float | None = Form(None),
+    lon: float | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    outlet = db.get(NonDealerWorkshop, outlet_id)
+    if not outlet:
+        raise HTTPException(status_code=404, detail="Non-dealer workshop not found")
+
+    outlet.outlet_name = outlet_name
+    outlet.city = city
+    outlet.state = state
+    outlet.postcode = postcode
+    outlet.lat = lat
+    outlet.lon = lon
+    db.commit()
+    return RedirectResponse("/admin/non-dealer-workshops", status_code=303)
+
+
+@app.get("/admin/competitor-bp", response_class=HTMLResponse)
+def list_competitor_bp_outlets(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    outlets = db.query(CompetitorBPOutlet).order_by(CompetitorBPOutlet.id).all()
+    return templates.TemplateResponse(
+        request,
+        "competitor_bp_outlets.html",
+        {"request": request, "outlets": outlets},
+    )
+
+
+@app.post("/admin/competitor-bp")
+def create_competitor_bp_outlet(
+    request: Request,
+    outlet_name: str = Form(...),
+    address: str = Form(""),
+    city: str = Form(""),
+    state: str = Form(""),
+    postcode: str = Form(""),
+    lat: float | None = Form(None),
+    lon: float | None = Form(None),
+    phone: str = Form(""),
+    email: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    outlet = CompetitorBPOutlet(
+        outlet_name=outlet_name,
+        address=address,
+        city=city,
+        state=state,
+        postcode=postcode,
+        lat=lat,
+        lon=lon,
+        phone=phone,
+        email=email,
+    )
+    db.add(outlet)
+    db.commit()
+    return RedirectResponse("/admin/competitor-bp", status_code=303)
+
+
+@app.get("/admin/competitor-bp/{outlet_id}/edit", response_class=HTMLResponse)
+def edit_competitor_bp_outlet_form(
+    outlet_id: int, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    outlet = db.get(CompetitorBPOutlet, outlet_id)
+    if not outlet:
+        raise HTTPException(status_code=404, detail="Competitor B&P outlet not found")
+    return templates.TemplateResponse(
+        request,
+        "competitor_bp_outlet_edit.html",
+        {"request": request, "outlet": outlet},
+    )
+
+
+@app.post("/admin/competitor-bp/{outlet_id}/edit")
+def update_competitor_bp_outlet(
+    outlet_id: int,
+    request: Request,
+    outlet_name: str = Form(...),
+    city: str = Form(""),
+    state: str = Form(""),
+    postcode: str = Form(""),
+    lat: float | None = Form(None),
+    lon: float | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    outlet = db.get(CompetitorBPOutlet, outlet_id)
+    if not outlet:
+        raise HTTPException(status_code=404, detail="Competitor B&P outlet not found")
+
+    outlet.outlet_name = outlet_name
+    outlet.city = city
+    outlet.state = state
+    outlet.postcode = postcode
+    outlet.lat = lat
+    outlet.lon = lon
+    db.commit()
+    return RedirectResponse("/admin/competitor-bp", status_code=303)
+
+
 @app.get("/admin/traffic-stations", response_class=HTMLResponse)
 def list_traffic_stations(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     stations = db.query(TrafficPoliceStation).order_by(TrafficPoliceStation.id).all()
@@ -1020,6 +1221,16 @@ def _normalize_customer_upload_state(value: Any, line_number: int) -> str:
     return canonical
 
 
+def _validate_customer_upload_coordinates(lat: float, lon: float, line_number: int) -> None:
+    south, west = MALAYSIA_BOUNDS[0]
+    north, east = MALAYSIA_BOUNDS[1]
+    if not (south <= lat <= north and west <= lon <= east):
+        raise ValueError(
+            f"Line {line_number}: lat/lon must be within Malaysia bounds "
+            f"({south} to {north}, {west} to {east}), got {lat}, {lon}."
+        )
+
+
 def _prepare_customer_upload_rows(df: pd.DataFrame) -> Tuple[List[dict], List[str]]:
     required_cols = {"state", "city", "postcode", "lat", "lon", "weight"}
     missing = required_cols - set(df.columns)
@@ -1041,14 +1252,17 @@ def _prepare_customer_upload_rows(df: pd.DataFrame) -> Tuple[List[dict], List[st
                 raise ValueError(f"Line {line_number}: city is required.")
             if not postcode:
                 raise ValueError(f"Line {line_number}: postcode is required.")
+            lat = _parse_customer_upload_float(row.get("lat"), "lat", line_number)
+            lon = _parse_customer_upload_float(row.get("lon"), "lon", line_number)
+            _validate_customer_upload_coordinates(lat, lon, line_number)
 
             prepared_rows.append(
                 {
                     "state": state,
                     "city": city,
                     "postcode": postcode,
-                    "lat": _parse_customer_upload_float(row.get("lat"), "lat", line_number),
-                    "lon": _parse_customer_upload_float(row.get("lon"), "lon", line_number),
+                    "lat": lat,
+                    "lon": lon,
                     "weight": _parse_customer_upload_float(
                         row.get("weight"), "weight", line_number
                     ),

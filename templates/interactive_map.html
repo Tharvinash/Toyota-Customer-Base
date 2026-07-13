@@ -236,6 +236,18 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
         <span>Toyota Body &amp; Paint</span>
       </div>
       <div class="legend-item">
+        <span class="legend-icon legend-icon-non-dealer">
+          <i class="fa fa-cogs" aria-hidden="true"></i>
+        </span>
+        <span>Non-Dealer Workshops</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-icon legend-icon-competitor-bp">
+          <i class="fa fa-paint-brush" aria-hidden="true"></i>
+        </span>
+        <span>Competitor B&amp;P</span>
+      </div>
+      <div class="legend-item">
         <span class="legend-icon legend-icon-traffic">
           <i class="fa fa-shield" aria-hidden="true"></i>
         </span>
@@ -307,6 +319,12 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
   .legend-icon-bp {
     background: #198754;
   }
+  .legend-icon-non-dealer {
+    background: #6f42c1;
+  }
+  .legend-icon-competitor-bp {
+    background: #fd7e14;
+  }
   .legend-icon-traffic {
     background: #dc3545;
   }
@@ -335,6 +353,12 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
   .map-point-icon-bp {
     background: #198754;
   }
+  .map-point-icon-non-dealer {
+    background: #6f42c1;
+  }
+  .map-point-icon-competitor-bp {
+    background: #fd7e14;
+  }
   .map-point-icon-traffic {
     background: #dc3545;
   }
@@ -353,6 +377,36 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
   #map-container.export-only #map-legend {
     right: 14px !important;
     bottom: 14px !important;
+  }
+  #map-container:fullscreen {
+    border-radius: 0 !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    width: 100vw !important;
+  }
+  #map-container:-webkit-full-screen {
+    border-radius: 0 !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    width: 100vw !important;
+  }
+  .leaflet-control-fullscreen-toggle {
+    align-items: center;
+    background: #fff;
+    color: #111;
+    display: flex;
+    font-size: 16px;
+    height: 30px;
+    justify-content: center;
+    line-height: 30px;
+    text-decoration: none;
+    width: 30px;
+  }
+  .leaflet-control-fullscreen-toggle:hover,
+  .leaflet-control-fullscreen-toggle:focus {
+    background: #f4f4f4;
+    color: #111;
+    text-decoration: none;
   }
   .multi-state-checkbox-grid {
     border: 1px solid #ced4da;
@@ -582,13 +636,24 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
   }
 
   function clearRenderedMap() {
-    if (!customersLayer || !customerCirclesLayer || !serviceLayer || !bpLayer || !trafficLayer || !boundaryLayer) {
+    if (
+      !customersLayer ||
+      !customerCirclesLayer ||
+      !serviceLayer ||
+      !bpLayer ||
+      !nonDealerLayer ||
+      !competitorBpLayer ||
+      !trafficLayer ||
+      !boundaryLayer
+    ) {
       return;
     }
     customersLayer.clearLayers();
     customerCirclesLayer.clearLayers();
     serviceLayer.clearLayers();
     bpLayer.clearLayers();
+    nonDealerLayer.clearLayers();
+    competitorBpLayer.clearLayers();
     trafficLayer.clearLayers();
     boundaryLayer.clearLayers();
     clearStateTileMask();
@@ -610,7 +675,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     const city = citySelect.value;
     const postcode = postcodeSelect.value;
     
-    if (!map || !customersLayer || !serviceLayer || !bpLayer || !trafficLayer || !boundaryLayer) {
+    if (!map || !customersLayer || !serviceLayer || !bpLayer || !nonDealerLayer || !competitorBpLayer || !trafficLayer || !boundaryLayer) {
       statusEl.textContent = "Map is still loading. Please wait...";
       statusEl.style.color = "#dc3545";
       setTimeout(() => runFilterSearch(), 500);
@@ -644,7 +709,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       renderFilteredData(data);
       
       const totalResults = (data.customers?.length || 0) + (data.service?.length || 0) + 
-                          (data.bp?.length || 0) + (data.traffic?.length || 0);
+                          (data.bp?.length || 0) + (data.non_dealer?.length || 0) +
+                          (data.competitor_bp?.length || 0) + (data.traffic?.length || 0);
       const scopeLabel = state || "all states";
       statusEl.textContent = `Found ${totalResults} result(s) in ${scopeLabel}${city ? `, ${city}` : ""}${postcode ? `, postcode ${postcode}` : ""}`;
       statusEl.style.color = "#28a745";
@@ -679,7 +745,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       return;
     }
 
-    if (!map || !customersLayer || !serviceLayer || !bpLayer || !trafficLayer || !boundaryLayer) {
+    if (!map || !customersLayer || !serviceLayer || !bpLayer || !nonDealerLayer || !competitorBpLayer || !trafficLayer || !boundaryLayer) {
       statusEl.textContent = "Map is still loading. Please wait...";
       statusEl.style.color = "#dc3545";
       setTimeout(() => runMultiStateSearch(), 500);
@@ -709,6 +775,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
         (data.customers?.length || 0) +
         (data.service?.length || 0) +
         (data.bp?.length || 0) +
+        (data.non_dealer?.length || 0) +
+        (data.competitor_bp?.length || 0) +
         (data.traffic?.length || 0);
       const stateLabel = (data.states || selectedStates).join(", ");
       statusEl.textContent = `Showing ${selectedStates.length} state(s): ${stateLabel} | Found ${totalResults} result(s)`;
@@ -804,7 +872,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     let boundaryBoundsForFit = null;
     
     // Create heatmap from customer data
-    const customers = data.customers || [];
+    const customers = filterMalaysiaPoints(data.customers || []);
     if (customers.length > 0) {
       const heatmapData = {};
       customers.forEach((customer) => {
@@ -886,7 +954,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     // Add markers
     function addMarkers(items, layer, style) {
       if (!Array.isArray(items)) return;
-      items.forEach((item) => {
+      filterMalaysiaPoints(items).forEach((item) => {
         if (!item || typeof item.lat !== "number" || typeof item.lon !== "number") {
           return;
         }
@@ -915,6 +983,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     
     addMarkers(data.service || [], serviceLayer, serviceStyle);
     addMarkers(data.bp || [], bpLayer, bpStyle);
+    addMarkers(data.non_dealer || [], nonDealerLayer, nonDealerStyle);
+    addMarkers(data.competitor_bp || [], competitorBpLayer, competitorBpStyle);
     addMarkers(data.traffic || [], trafficLayer, trafficStyle);
     
     const allMasterStatesCount = masterData?.states?.length || 0;
@@ -971,9 +1041,13 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       }
     } else if (bounds.length > 0) {
       try {
-        const mapBounds = L.latLngBounds(bounds);
         setStateOnlyMapMode(false);
-        map.fitBounds(mapBounds, { padding: [20, 20] });
+        if (!data.state && !data.city && !data.postcode && malaysiaBounds) {
+          map.fitBounds(malaysiaBounds, { padding: [20, 20] });
+        } else {
+          const mapBounds = L.latLngBounds(bounds);
+          map.fitBounds(mapBounds, { padding: [20, 20] });
+        }
         setTimeout(() => map.invalidateSize(), 100);
       } catch (e) {
         console.warn("Error fitting bounds:", e);
@@ -1012,6 +1086,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     customerCirclesLayer,
     serviceLayer,
     bpLayer,
+    nonDealerLayer,
+    competitorBpLayer,
     trafficLayer,
     stateTileMaskLayer,
     boundaryLayer;
@@ -1034,6 +1110,14 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     markerClass: "map-point-icon-bp",
     iconClass: "fa-car",
   };
+  const nonDealerStyle = {
+    markerClass: "map-point-icon-non-dealer",
+    iconClass: "fa-cogs",
+  };
+  const competitorBpStyle = {
+    markerClass: "map-point-icon-competitor-bp",
+    iconClass: "fa-paint-brush",
+  };
   const trafficStyle = {
     markerClass: "map-point-icon-traffic",
     iconClass: "fa-shield",
@@ -1050,6 +1134,12 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     "#fa541c",
     "#2f54eb",
   ];
+  const MALAYSIA_LAT_LON_BOUNDS = {
+    south: 0.85,
+    west: 99.5,
+    north: 7.5,
+    east: 119.5,
+  };
   const densityBuckets = [
     { max: 499.999999, label: "< 500", color: "#2b83ba" },
     { min: 500, max: 1000, label: "500 - 1,000", color: "#56a6b4" },
@@ -1107,6 +1197,26 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     return Boolean(MALAYSIAN_STATE_LOOKUP[key]);
   }
 
+  function isPointInMalaysia(lat, lon) {
+    return (
+      Number.isFinite(lat) &&
+      Number.isFinite(lon) &&
+      lat >= MALAYSIA_LAT_LON_BOUNDS.south &&
+      lat <= MALAYSIA_LAT_LON_BOUNDS.north &&
+      lon >= MALAYSIA_LAT_LON_BOUNDS.west &&
+      lon <= MALAYSIA_LAT_LON_BOUNDS.east
+    );
+  }
+
+  function filterMalaysiaPoints(items) {
+    if (!Array.isArray(items)) return [];
+    return items.filter((item) => {
+      const lat = Number(item?.lat);
+      const lon = Number(item?.lon);
+      return isPointInMalaysia(lat, lon);
+    });
+  }
+
   function getBoundaryColor(index) {
     return boundaryColors[index % boundaryColors.length];
   }
@@ -1146,6 +1256,87 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     if (weight <= 4500) return 24;
     if (weight <= 5000) return 26;
     return 28;
+  }
+
+  function isMapFullscreen() {
+    const container = document.getElementById("map-container");
+    return Boolean(
+      container &&
+        (document.fullscreenElement === container ||
+          document.webkitFullscreenElement === container)
+    );
+  }
+
+  function refreshFullscreenButton(button) {
+    if (!button) return;
+    const icon = button.querySelector("i");
+    const fullscreen = isMapFullscreen();
+    button.title = fullscreen ? "Exit fullscreen" : "View fullscreen";
+    button.setAttribute("aria-label", button.title);
+    if (icon) {
+      icon.className = `fa ${fullscreen ? "fa-compress" : "fa-expand"}`;
+    }
+  }
+
+  function invalidateMapAfterFullscreenChange() {
+    setTimeout(() => {
+      if (map) {
+        map.invalidateSize();
+      }
+    }, 150);
+  }
+
+  function addFullscreenControl() {
+    const mapContainer = document.getElementById("map-container");
+    if (!map || !mapContainer) return;
+
+    const FullscreenControl = L.Control.extend({
+      options: {
+        position: "topleft",
+      },
+      onAdd: function () {
+        const wrapper = L.DomUtil.create("div", "leaflet-bar leaflet-control");
+        const button = L.DomUtil.create(
+          "a",
+          "leaflet-control-fullscreen-toggle",
+          wrapper
+        );
+        button.href = "#";
+        button.innerHTML = '<i class="fa fa-expand" aria-hidden="true"></i>';
+        refreshFullscreenButton(button);
+
+        L.DomEvent.disableClickPropagation(wrapper);
+        L.DomEvent.on(button, "click", (event) => {
+          L.DomEvent.preventDefault(event);
+          if (isMapFullscreen()) {
+            if (document.exitFullscreen) {
+              document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+              document.webkitExitFullscreen();
+            }
+            return;
+          }
+          if (mapContainer.requestFullscreen) {
+            mapContainer.requestFullscreen();
+          } else if (mapContainer.webkitRequestFullscreen) {
+            mapContainer.webkitRequestFullscreen();
+          }
+        });
+
+        document.addEventListener("fullscreenchange", () => {
+          refreshFullscreenButton(button);
+          invalidateMapAfterFullscreenChange();
+        });
+        document.addEventListener("webkitfullscreenchange", () => {
+          refreshFullscreenButton(button);
+          invalidateMapAfterFullscreenChange();
+        });
+
+        return wrapper;
+      },
+    });
+
+    map.addControl(new FullscreenControl());
   }
 
   function escapeHtml(value) {
@@ -1456,6 +1647,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     customerCirclesLayer = L.layerGroup().addTo(map);
     serviceLayer = L.layerGroup().addTo(map);
     bpLayer = L.layerGroup().addTo(map);
+    nonDealerLayer = L.layerGroup().addTo(map);
+    competitorBpLayer = L.layerGroup().addTo(map);
     trafficLayer = L.layerGroup().addTo(map);
     stateTileMaskLayer = L.layerGroup().addTo(map);
     boundaryLayer = L.layerGroup().addTo(map);
@@ -1466,6 +1659,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       "Customer Density": customerCirclesLayer,
       "Toyota Service Outlets": serviceLayer,
       "Toyota Body & Paint": bpLayer,
+      "Non-Dealer Workshops": nonDealerLayer,
+      "Competitor B&P": competitorBpLayer,
       "Traffic Police Stations": trafficLayer,
       "Search Boundary": boundaryLayer,
     };
@@ -1476,6 +1671,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
         position: "topleft",
       })
       .addTo(map);
+
+    addFullscreenControl();
 
     runFilterSearch();
 
@@ -1535,6 +1732,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       !customersLayer ||
       !serviceLayer ||
       !bpLayer ||
+      !nonDealerLayer ||
+      !competitorBpLayer ||
       !trafficLayer ||
       !boundaryLayer
     ) {
@@ -1656,13 +1855,15 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       customerCirclesLayer.clearLayers();
       serviceLayer.clearLayers();
       bpLayer.clearLayers();
+      nonDealerLayer.clearLayers();
+      competitorBpLayer.clearLayers();
       trafficLayer.clearLayers();
       boundaryLayer.clearLayers();
 
       const bounds = [];
 
       // Create heatmap from customer data
-      const customers = data.customers || [];
+      const customers = filterMalaysiaPoints(data.customers || []);
       if (customers.length > 0) {
         const heatmapData = {};
         customers.forEach((customer) => {
@@ -1753,7 +1954,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       // Add markers for other layers
       function addMarkers(items, layer, style) {
         if (!Array.isArray(items)) return;
-        items.forEach((item) => {
+        filterMalaysiaPoints(items).forEach((item) => {
           if (
             !item ||
             typeof item.lat !== "number" ||
@@ -1788,6 +1989,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
 
       addMarkers(data.service || [], serviceLayer, serviceStyle);
       addMarkers(data.bp || [], bpLayer, bpStyle);
+      addMarkers(data.non_dealer || [], nonDealerLayer, nonDealerStyle);
+      addMarkers(data.competitor_bp || [], competitorBpLayer, competitorBpStyle);
       addMarkers(data.traffic || [], trafficLayer, trafficStyle);
 
       // Draw boundaries and center markers
@@ -1854,6 +2057,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
         (data.customers?.length || 0) +
         (data.service?.length || 0) +
         (data.bp?.length || 0) +
+        (data.non_dealer?.length || 0) +
+        (data.competitor_bp?.length || 0) +
         (data.traffic?.length || 0);
 
       // Build status message
