@@ -221,47 +221,61 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       pointer-events: auto;
     "
   >
-    <div class="legend-title">Legend</div>
-    <div class="legend-list">
-      <div class="legend-item">
-        <span class="legend-icon legend-icon-service">
-          <i class="fa fa-wrench" aria-hidden="true"></i>
-        </span>
-        <span>Toyota Service Outlets</span>
-      </div>
-      <div class="legend-item">
-        <span class="legend-icon legend-icon-bp">
-          <i class="fa fa-car" aria-hidden="true"></i>
-        </span>
-        <span>Toyota Body &amp; Paint</span>
-      </div>
-      <div class="legend-item">
-        <span class="legend-icon legend-icon-non-dealer">
-          <i class="fa fa-cogs" aria-hidden="true"></i>
-        </span>
-        <span>Non-Dealer Workshops</span>
-      </div>
-      <div class="legend-item">
-        <span class="legend-icon legend-icon-competitor-bp">
-          <i class="fa fa-paint-brush" aria-hidden="true"></i>
-        </span>
-        <span>Competitor B&amp;P</span>
-      </div>
-      <div class="legend-item">
-        <span class="legend-icon legend-icon-traffic">
-          <i class="fa fa-shield" aria-hidden="true"></i>
-        </span>
-        <span>Traffic Police Stations</span>
-      </div>
+    <div class="legend-header">
+      <div class="legend-title">Legend</div>
+      <button
+        type="button"
+        id="legend-toggle-btn"
+        class="map-panel-toggle"
+        aria-label="Minimize legend"
+        aria-expanded="true"
+        title="Minimize legend"
+      >
+        <i class="fa fa-minus" aria-hidden="true"></i>
+      </button>
     </div>
-    <hr style="margin: 8px 0" />
-    <div class="legend-title legend-density-title">
-      <span class="legend-icon legend-icon-density">
-        <i class="fa fa-fire" aria-hidden="true"></i>
-      </span>
-      <span>Customer Density</span>
+    <div id="legend-body">
+      <div class="legend-list">
+        <div class="legend-item">
+          <span class="legend-icon legend-icon-service">
+            <i class="fa fa-wrench" aria-hidden="true"></i>
+          </span>
+          <span>Toyota Service Outlets</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-icon legend-icon-bp">
+            <i class="fa fa-car" aria-hidden="true"></i>
+          </span>
+          <span>Toyota Body &amp; Paint</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-icon legend-icon-non-dealer">
+            <i class="fa fa-cogs" aria-hidden="true"></i>
+          </span>
+          <span>Non-Dealer Workshops</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-icon legend-icon-competitor-bp">
+            <i class="fa fa-paint-brush" aria-hidden="true"></i>
+          </span>
+          <span>Competitor B&amp;P</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-icon legend-icon-traffic">
+            <i class="fa fa-shield" aria-hidden="true"></i>
+          </span>
+          <span>Traffic Police Stations</span>
+        </div>
+      </div>
+      <hr style="margin: 8px 0" />
+      <div class="legend-title legend-density-title">
+        <span class="legend-icon legend-icon-density">
+          <i class="fa fa-fire" aria-hidden="true"></i>
+        </span>
+        <span>Customer Density</span>
+      </div>
+      <div id="density-legend-ranges" style="line-height: 1.4"></div>
     </div>
-    <div id="density-legend-ranges" style="line-height: 1.4"></div>
   </div>
 </div>
 </div>
@@ -279,12 +293,48 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
 />
 <style>
   /* Mobile responsive fixes for interactive map */
+  .legend-header {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+  }
   .legend-title {
     align-items: center;
     display: flex;
     font-weight: 600;
     gap: 8px;
     margin-bottom: 6px;
+  }
+  .legend-header .legend-title {
+    margin-bottom: 0;
+  }
+  .map-panel-toggle {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #adb5bd;
+    border-radius: 4px;
+    color: #212529;
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 26px;
+    font-size: 12px;
+    height: 26px;
+    justify-content: center;
+    padding: 0;
+    width: 26px;
+  }
+  .map-panel-toggle:hover,
+  .map-panel-toggle:focus {
+    background: #f1f3f5;
+    outline: none;
+  }
+  #map-legend.is-collapsed {
+    min-width: 112px !important;
+    padding: 8px 10px !important;
+  }
+  #map-legend.is-collapsed #legend-body {
+    display: none;
   }
   .legend-density-title {
     margin-bottom: 4px;
@@ -407,6 +457,14 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     background: #f4f4f4;
     color: #111;
     text-decoration: none;
+  }
+  .leaflet-control-layers-toggle {
+    height: 32px !important;
+    width: 32px !important;
+  }
+  .leaflet-control-layers-expanded {
+    max-height: min(320px, calc(100vh - 180px));
+    overflow: auto;
   }
   .multi-state-checkbox-grid {
     border: 1px solid #ced4da;
@@ -1244,6 +1302,33 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       .join("");
   }
 
+  function setupLegendToggle() {
+    const legend = document.getElementById("map-legend");
+    const toggleButton = document.getElementById("legend-toggle-btn");
+    if (!legend || !toggleButton) return;
+
+    const icon = toggleButton.querySelector("i");
+
+    function setCollapsed(collapsed) {
+      legend.classList.toggle("is-collapsed", collapsed);
+      toggleButton.setAttribute("aria-expanded", String(!collapsed));
+      toggleButton.setAttribute(
+        "aria-label",
+        collapsed ? "Expand legend" : "Minimize legend"
+      );
+      toggleButton.title = collapsed ? "Expand legend" : "Minimize legend";
+      if (icon) {
+        icon.className = collapsed ? "fa fa-plus" : "fa fa-minus";
+      }
+    }
+
+    toggleButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setCollapsed(!legend.classList.contains("is-collapsed"));
+    });
+  }
+
   function getDensityRadius(weight) {
     if (weight < 500) return 8;
     if (weight <= 1000) return 10;
@@ -1707,6 +1792,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
   // Wait for DOM to be fully loaded before initializing map
   document.addEventListener("DOMContentLoaded", function () {
     renderDensityLegend();
+    setupLegendToggle();
     // Load master data for cascading dropdowns
     loadMasterData();
     
@@ -1803,7 +1889,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
 
     layerControl = L.control
       .layers(baseLayers, overlayLayers, {
-        collapsed: false,
+        collapsed: true,
         position: "topleft",
       })
       .addTo(map);
