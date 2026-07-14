@@ -864,9 +864,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     clearRenderedMap();
     lastSearchLabel = "";
     setDownloadButtonEnabled(false);
-    setStateOnlyMapMode(false);
-    map.setView([4.5, 109.0], 6);
-    setTimeout(() => map.invalidateSize(), 100);
+    resetToMalaysiaViewport();
   }
 
   function resetMapDisplay() {
@@ -878,11 +876,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     clearRenderedMap();
     lastSearchLabel = "";
     setDownloadButtonEnabled(false);
-    setStateOnlyMapMode(false);
-    if (map) {
-      map.setView([4.5, 109.0], 6);
-      setTimeout(() => map.invalidateSize(), 100);
-    }
+    resetToMalaysiaViewport();
   }
 
   function resetSingleStateControls() {
@@ -1091,9 +1085,10 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     if (boundaryBoundsForFit && boundaryBoundsForFit.isValid()) {
       try {
         setStateOnlyMapMode(true);
-        map.setMaxBounds(boundaryBoundsForFit.pad(0.08));
-        map.fitBounds(boundaryBoundsForFit, { padding: [20, 20] });
-        setTimeout(() => map.invalidateSize(), 100);
+        applyMapViewport(boundaryBoundsForFit, {
+          restrictToTarget: true,
+          fit: true,
+        });
       } catch (e) {
         console.warn("Error fitting boundary:", e);
       }
@@ -1101,15 +1096,22 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       try {
         setStateOnlyMapMode(false);
         if (!data.state && !data.city && !data.postcode && malaysiaBounds) {
-          map.fitBounds(malaysiaBounds, { padding: [20, 20] });
+          applyMapViewport(malaysiaBounds, {
+            restrictToTarget: false,
+            fit: true,
+          });
         } else {
           const mapBounds = L.latLngBounds(bounds);
-          map.fitBounds(mapBounds, { padding: [20, 20] });
+          applyMapViewport(mapBounds, {
+            restrictToTarget: false,
+            fit: true,
+          });
         }
-        setTimeout(() => map.invalidateSize(), 100);
       } catch (e) {
         console.warn("Error fitting bounds:", e);
       }
+    } else {
+      resetToMalaysiaViewport();
     }
   }
 
@@ -1132,10 +1134,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     setDownloadButtonEnabled(false);
     
     clearRenderedMap();
-    
-    setStateOnlyMapMode(false);
-    map.setView([4.5, 109.0], 6);
-    setTimeout(() => map.invalidateSize(), 100);
+    resetToMalaysiaViewport();
   }
 
   // Declare map variable globally
@@ -1151,6 +1150,8 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     boundaryLayer;
   let layerControl;
   let malaysiaBounds;
+  let activeViewportBounds;
+  let activeViewportRestrictToTarget = false;
   let baseTileLayer;
 
   // Define marker styles globally so they're accessible everywhere
@@ -1367,6 +1368,7 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     setTimeout(() => {
       if (map) {
         map.invalidateSize();
+        refreshActiveViewport();
       }
     }, 150);
   }
@@ -1765,6 +1767,114 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     });
   }
 
+  function clampBoundsToMalaysia(candidateBounds) {
+    if (!malaysiaBounds) return null;
+
+    const candidate = candidateBounds
+      ? L.latLngBounds(candidateBounds)
+      : malaysiaBounds;
+    if (!candidate.isValid()) return malaysiaBounds;
+
+    const malaysiaSouthWest = malaysiaBounds.getSouthWest();
+    const malaysiaNorthEast = malaysiaBounds.getNorthEast();
+    const candidateSouthWest = candidate.getSouthWest();
+    const candidateNorthEast = candidate.getNorthEast();
+    const south = Math.max(candidateSouthWest.lat, malaysiaSouthWest.lat);
+    const west = Math.max(candidateSouthWest.lng, malaysiaSouthWest.lng);
+    const north = Math.min(candidateNorthEast.lat, malaysiaNorthEast.lat);
+    const east = Math.min(candidateNorthEast.lng, malaysiaNorthEast.lng);
+
+    if (south > north || west > east) return malaysiaBounds;
+
+    const minimumSpan = 0.02;
+    const centerLat = (south + north) / 2;
+    const centerLng = (west + east) / 2;
+    const halfLatSpan = Math.max((north - south) / 2, minimumSpan / 2);
+    const halfLngSpan = Math.max((east - west) / 2, minimumSpan / 2);
+
+    return L.latLngBounds(
+      [
+        Math.max(centerLat - halfLatSpan, malaysiaSouthWest.lat),
+        Math.max(centerLng - halfLngSpan, malaysiaSouthWest.lng),
+      ],
+      [
+        Math.min(centerLat + halfLatSpan, malaysiaNorthEast.lat),
+        Math.min(centerLng + halfLngSpan, malaysiaNorthEast.lng),
+      ]
+    );
+  }
+
+  function getViewportRestrictionBounds(targetBounds, restrictToTarget) {
+    if (!restrictToTarget) return malaysiaBounds;
+    return clampBoundsToMalaysia(targetBounds.pad(0.08));
+  }
+
+  function calculateViewportMinimumZoom(restrictionBounds) {
+    if (!map || !restrictionBounds || !restrictionBounds.isValid()) return 1;
+    const zoom = map.getBoundsZoom(
+      restrictionBounds,
+      false,
+      L.point(40, 40)
+    );
+    return Number.isFinite(zoom) ? Math.max(1, Math.min(zoom, 18)) : 1;
+  }
+
+  function refreshActiveViewport() {
+    if (!map || !malaysiaBounds) return;
+
+    const targetBounds = clampBoundsToMalaysia(
+      activeViewportBounds || malaysiaBounds
+    );
+    const restrictionBounds = getViewportRestrictionBounds(
+      targetBounds,
+      activeViewportRestrictToTarget
+    );
+    const minimumZoom = calculateViewportMinimumZoom(restrictionBounds);
+
+    map.setMaxBounds(restrictionBounds);
+    map.setMinZoom(minimumZoom);
+    if (map.getZoom() < minimumZoom) {
+      map.setZoom(minimumZoom, { animate: false });
+    }
+    map.panInsideBounds(restrictionBounds, { animate: false });
+  }
+
+  function applyMapViewport(
+    candidateBounds,
+    { restrictToTarget = false, fit = true } = {}
+  ) {
+    if (!map || !malaysiaBounds) return;
+
+    const targetBounds = clampBoundsToMalaysia(candidateBounds);
+    activeViewportBounds = targetBounds;
+    activeViewportRestrictToTarget = restrictToTarget;
+    refreshActiveViewport();
+
+    if (fit) {
+      map.fitBounds(targetBounds, {
+        padding: [20, 20],
+        animate: false,
+      });
+      refreshActiveViewport();
+    }
+
+    setTimeout(() => {
+      if (map) {
+        map.invalidateSize();
+        refreshActiveViewport();
+      }
+    }, 100);
+  }
+
+  function resetToMalaysiaViewport() {
+    if (!map || !malaysiaBounds) return;
+    setStateOnlyMapMode(false);
+    applyMapViewport(malaysiaBounds, {
+      restrictToTarget: false,
+      fit: true,
+    });
+  }
+
   function setStateOnlyMapMode(enabled) {
     if (!map) return;
 
@@ -1784,17 +1894,12 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
     if (baseTileLayer && !map.hasLayer(baseTileLayer)) {
       baseTileLayer.addTo(map);
     }
-    if (malaysiaBounds) {
-      map.setMaxBounds(malaysiaBounds);
-    }
   }
 
   // Wait for DOM to be fully loaded before initializing map
-  document.addEventListener("DOMContentLoaded", function () {
+  document.addEventListener("DOMContentLoaded", async function () {
     renderDensityLegend();
     setupLegendToggle();
-    // Load master data for cascading dropdowns
-    loadMasterData();
     
     // Setup filter search button
     document.getElementById("filter-search-btn").addEventListener("click", runFilterSearch);
@@ -1896,7 +2001,9 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
 
     addFullscreenControl();
 
-    runFilterSearch();
+    await loadMasterData();
+    resetToMalaysiaViewport();
+    await runFilterSearch();
 
     // Old search UI removed - using cascading dropdowns instead
   });
@@ -2259,19 +2366,27 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
       // Fit map to bounds
       if (mapBounds) {
         try {
-          map.fitBounds(mapBounds, { padding: [20, 20] });
-          setTimeout(() => {
-            map.invalidateSize();
-          }, 100);
+          applyMapViewport(mapBounds, {
+            restrictToTarget: false,
+            fit: true,
+          });
         } catch (e) {
           console.warn("Error fitting bounds:", e);
         }
       } else if (bounds.length > 0) {
-        map.setView(bounds[0], 12);
+        applyMapViewport(L.latLngBounds(bounds), {
+          restrictToTarget: false,
+          fit: true,
+        });
       } else if (boundaries[0]?.center) {
-        map.setView([boundaries[0].center.lat, boundaries[0].center.lon], 12);
+        applyMapViewport(
+          L.latLngBounds([
+            [boundaries[0].center.lat, boundaries[0].center.lon],
+          ]),
+          { restrictToTarget: false, fit: true }
+        );
       } else {
-        map.setView([4.5, 109.0], 6);
+        resetToMalaysiaViewport();
       }
 
       // Count total results
@@ -2322,13 +2437,19 @@ block main_class %}container-fluid px-3{% endblock %} {% block content %}
   // Handle window resize and orientation change for mobile
   window.addEventListener("resize", () => {
     setTimeout(() => {
-      map.invalidateSize();
+      if (map) {
+        map.invalidateSize();
+        refreshActiveViewport();
+      }
     }, 100);
   });
 
   window.addEventListener("orientationchange", () => {
     setTimeout(() => {
-      map.invalidateSize();
+      if (map) {
+        map.invalidateSize();
+        refreshActiveViewport();
+      }
     }, 200);
   });
 </script>
